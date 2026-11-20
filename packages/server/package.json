@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@live-os/shared": "*",
+    "fastify": "^5.12.8",
     "kysely": "0.29.9",
     "mysql2": "3.24.6",
-    "@live-os/shared": "*"
+    "zod": "^4.6.7"
   }
 }

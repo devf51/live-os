@@ -59,8 +59,28 @@ describe('routes', () => {
     for (let i = 0; i < 5; i++) expect((await login(app, 'bad')).statusCode).toBe(401)
     expect((await login(app, 'bad')).statusCode).toBe(429)
   })
+  it('unknown paths and root-level routes registered later are protected', async () => {
+    const app = mk()
+    app.get('/late', async () => 'x')
+    expect((await app.inject({ url: '/late' })).statusCode).toBe(401)
+    expect((await app.inject({ url: '/nope' })).statusCode).toBe(401)
+  })
+  it('parallel wrong logins are all counted', async () => {
+    const app = mk()
+    const codes = (await Promise.all(Array.from({ length: 20 }, () => login(app, 'bad')))).map((r) => r.statusCode)
+    expect(codes.filter((c) => c === 401).length).toBeLessThanOrEqual(5)
+    expect(codes.filter((c) => c === 429).length).toBe(codes.length - codes.filter((c) => c === 401).length)
+    expect((await login(app, 'bad')).statusCode).toBe(429)
+  })
+  it('successful login resets the counter', async () => {
+    const app = mk()
+    for (let i = 0; i < 3; i++) await login(app, 'bad')
+    expect((await login(app, PW)).statusCode).toBe(200)
+    for (let i = 0; i < 3; i++) expect((await login(app, 'bad')).statusCode).toBe(401)
+  })
   it('logout is idempotent and clears the cookie', async () => {
     const res = await mk().inject({ method: 'POST', url: '/auth/logout' })
     expect(res.statusCode).toBe(204)
+    expect(res.cookies[0]).toMatchObject({ name: 'session', value: '' })
   })
 })

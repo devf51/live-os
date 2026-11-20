@@ -17,11 +17,8 @@ export interface AppDeps {
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify()
   app.register(cookie)
-  // Plugin scope: the onRequest hook in authRoutes protects every route registered
-  // in this scope, so later tasks add `app.register(...)` lines below it.
-  app.register(async (scope) => {
-    authRoutes(scope, deps, deps.now ?? (() => new Date()), deps.secureCookie ?? process.env.NODE_ENV !== 'test')
-    // later tasks: scope.register(todayRoutes, deps) etc.
-  })
+  // The auth hook sits on the root instance, so any route registered anywhere
+  // (later tasks: just `app.register(...)` here) is protected, 404s included.
+  authRoutes(app, deps, deps.now ?? (() => new Date()), deps.secureCookie ?? process.env.NODE_ENV !== 'test')
   return app
 }

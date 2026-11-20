@@ -20,14 +20,14 @@ export function authRoutes(app: FastifyInstance, deps: AppDeps, now: () => Date,
 
   app.post('/auth/login', async (req, reply) => {
     const t = now().getTime()
-    const f = fails.get(req.ip)
-    if (f && t - f.since >= LOCK_MS) fails.delete(req.ip)
-    const cur = fails.get(req.ip)
-    if (cur && cur.n >= MAX_FAILS) return reply.code(429).send({ error: 'too many attempts' })
+    let f = fails.get(req.ip)
+    if (f && t - f.since >= LOCK_MS) f = undefined
+    if (f && f.n >= MAX_FAILS) return reply.code(429).send({ error: 'too many attempts' })
+    // reserve the attempt before the await so parallel requests are all counted
+    fails.set(req.ip, { n: (f?.n ?? 0) + 1, since: f?.since ?? t })
 
     const pw = (req.body as { password?: unknown } | null)?.password
     if (typeof pw !== 'string' || !(await verifyPassword(pw, deps.ownerPasswordHash))) {
-      fails.set(req.ip, { n: (cur?.n ?? 0) + 1, since: cur?.since ?? t })
       return reply.code(401).send({ error: 'invalid credentials' })
     }
     fails.delete(req.ip)

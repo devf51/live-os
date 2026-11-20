@@ -1,0 +1,11 @@
+{
+  "name": "@live-os/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "kysely": "0.29.9",
+    "mysql2": "3.24.6",
+    "@live-os/shared": "*"
+  }
+}

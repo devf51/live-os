@@ -15,7 +15,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .addColumn('id', 'bigint', id)
     .addColumn('role', sql`enum('user','bot')`, (c) => c.notNull())
     .addColumn('text', 'text', (c) => c.notNull())
-    .addColumn('actions_json', 'json')
+    .addColumn('actions_json', 'text')
     .addColumn('undone_at', 'datetime')
     .addColumn('created_at', 'datetime', (c) => c.notNull().defaultTo(now))
     .execute()
@@ -96,6 +96,6 @@ export async function up(db: Kysely<any>): Promise<void> {
 
   await s.createTable('settings')
     .addColumn('key', 'varchar(64)', (c) => c.primaryKey())
-    .addColumn('value_json', 'json', (c) => c.notNull())
+    .addColumn('value_json', 'text', (c) => c.notNull())
     .execute()
 }

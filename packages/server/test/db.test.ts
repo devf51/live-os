@@ -35,4 +35,20 @@ describe('schema', () => {
     await db.insertInto('habit_logs').values(row).execute()
     await expect(db.insertInto('habit_logs').values(row).execute()).rejects.toThrow()
   })
+
+  it('round-trips JSON-encoded text through actions_json and value_json', async () => {
+    const obj = { a: [1, 'ก'], b: { c: null } }
+    const { insertId } = await db.insertInto('chat_messages').values({ role: 'bot', text: 'x', actions_json: JSON.stringify(obj), undone_at: null }).executeTakeFirstOrThrow()
+    const m = await db.selectFrom('chat_messages').select('actions_json').where('id', '=', Number(insertId)).executeTakeFirstOrThrow()
+    expect(JSON.parse(m.actions_json!)).toEqual(obj)
+    await db.insertInto('settings').values({ key: 'k', value_json: JSON.stringify(obj) }).execute()
+    const s = await db.selectFrom('settings').select('value_json').where('key', '=', 'k').executeTakeFirstOrThrow()
+    expect(JSON.parse(s.value_json)).toEqual(obj)
+  })
+
+  it('created_at default is UTC', async () => {
+    const { insertId } = await db.insertInto('chat_messages').values({ role: 'user', text: 'x', actions_json: null, undone_at: null }).executeTakeFirstOrThrow()
+    const r = await db.selectFrom('chat_messages').select('created_at').where('id', '=', Number(insertId)).executeTakeFirstOrThrow()
+    expect(Math.abs(r.created_at.getTime() - Date.now())).toBeLessThan(5000)
+  })
 })

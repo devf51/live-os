@@ -6,10 +6,11 @@ import * as m001 from './migrations/001_init.js'
 const migrations = [{ version: '001_init', up: m001.up }]
 
 export function createDb(url: string): Kysely<Schema> {
-  return new Kysely<Schema>({
-    // cast: mysql2 3.24 Pool typings don't match kysely's MysqlPool, runtime is fine
-    dialect: new MysqlDialect({ pool: createPool({ uri: url, timezone: 'Z' }) as never }),
-  })
+  const pool = createPool({ uri: url, timezone: 'Z' })
+  // every pooled connection stores/defaults times in UTC (CURRENT_TIMESTAMP follows the session zone)
+  pool.on('connection', (c) => c.query("SET time_zone = '+00:00'"))
+  // cast: mysql2 3.24 Pool typings don't match kysely's MysqlPool, runtime is fine
+  return new Kysely<Schema>({ dialect: new MysqlDialect({ pool: pool as never }) })
 }
 
 export async function migrate(db: Kysely<Schema>): Promise<void> {

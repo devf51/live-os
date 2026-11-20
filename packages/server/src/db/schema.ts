@@ -1,6 +1,7 @@
 import type { Generated } from 'kysely'
 
 // DATETIME columns are UTC; money is integer satang (BIGINT, returned as number by mysql2).
+// *_json columns are JSON-encoded text (TEXT on both engines): JSON.stringify on write, JSON.parse on read.
 type Id = Generated<number>
 type Nullable<T> = T | null
 

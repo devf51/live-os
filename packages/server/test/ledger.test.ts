@@ -6,7 +6,7 @@ import { buildApp } from '../src/app.js'
 import { hashPassword } from '../src/auth/auth.js'
 import {
   addCategory, addTransaction, budgetCrossings, deleteTransaction, findCategory,
-  listRecentTransactions, monthSummary, restoreTransaction, seedDefaultCategories, setBudget,
+  LedgerError, listRecentTransactions, monthSummary, restoreTransaction, seedDefaultCategories, setBudget, updateTransaction,
 } from '../src/ledger/ledger.js'
 
 let db: Kysely<Schema>
@@ -87,6 +87,30 @@ describe('transactions + summary', () => {
   })
 })
 
+describe('kind mismatch', () => {
+  let inc: number
+  beforeEach(async () => { inc = (await addCategory(db, 'เงินเดือน', 'income')).id })
+  const tx = (kind: 'income' | 'expense', categoryId: number) =>
+    addTransaction(db, { categoryId, kind, amountSatang: 100, occurredAt: at('2026-11-15T05:00:00Z') })
+  it('add rejects both directions, accepts matching', async () => {
+    await expect(tx('expense', inc)).rejects.toThrow(LedgerError)
+    await expect(tx('income', food)).rejects.toThrow(LedgerError)
+    await tx('income', inc)
+    await tx('expense', food)
+  })
+  it('update rejects kind-only and category-only mismatches, row unchanged', async () => {
+    const { id } = await tx('expense', food)
+    await expect(updateTransaction(db, id, { kind: 'income' })).rejects.toThrow(LedgerError)
+    await expect(updateTransaction(db, id, { categoryId: inc })).rejects.toThrow(LedgerError)
+    const row = await db.selectFrom('transactions').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
+    expect([row.kind, Number(row.category_id)]).toEqual(['expense', food])
+    await updateTransaction(db, id, { kind: 'income', categoryId: inc })
+  })
+  it('setBudget rejects income category', async () => {
+    await expect(setBudget(db, inc, '2026-11', 100)).rejects.toThrow(LedgerError)
+  })
+})
+
 describe('listRecentTransactions', () => {
   it('newest first, limit, excludes deleted, typed', async () => {
     await spend(1, '2026-11-01T00:00:00Z')
@@ -142,6 +166,14 @@ describe('routes', () => {
     }
     expect((await req('PUT', '/budgets', { categoryId: food, month: '2026-00', limitSatang: 100 })).statusCode).toBe(400)
     expect((await req('PUT', '/budgets', { categoryId: food, month: '2026-11', limitSatang: 0 })).statusCode).toBe(400)
+  })
+  it('kind mismatch is 400', async () => {
+    const inc = (await addCategory(db, 'เงินเดือน', 'income')).id
+    const body = { categoryId: inc, kind: 'expense', amountSatang: 100, occurredAt: '2026-11-15T05:00:00Z' }
+    expect((await req('POST', '/transactions', body)).statusCode).toBe(400)
+    const { id } = (await req('POST', '/transactions', { ...body, categoryId: food })).json()
+    expect((await req('PATCH', `/transactions/${id}`, { categoryId: inc })).statusCode).toBe(400)
+    expect((await req('PUT', '/budgets', { categoryId: inc, month: '2026-11', limitSatang: 100 })).statusCode).toBe(400)
   })
   it('budgets PUT/GET and summary default month', async () => {
     expect((await req('PUT', '/budgets', { categoryId: food, month: '2026-11', limitSatang: 100000 })).statusCode).toBe(204)

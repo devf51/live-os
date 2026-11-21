@@ -36,9 +36,15 @@ function checkAmount(n: number) {
   if (!Number.isSafeInteger(n) || n <= 0) throw new LedgerError('invalid', 'amountSatang must be a positive integer')
 }
 
-async function requireCategory(db: Db, id: number) {
-  const c = await db.selectFrom('categories').select('id').where('id', '=', id).executeTakeFirst()
+async function requireCategory(db: Db, id: number): Promise<{ id: number; kind: Kind }> {
+  const c = await db.selectFrom('categories').select(['id', 'kind']).where('id', '=', id).executeTakeFirst()
   if (!c) throw new LedgerError('invalid', `unknown categoryId ${id}`)
+  return { id: Number(c.id), kind: c.kind }
+}
+
+async function requireMatching(db: Db, categoryId: number, kind: Kind) {
+  const c = await requireCategory(db, categoryId)
+  if (c.kind !== kind) throw new LedgerError('invalid', `kind ${kind} does not match category kind ${c.kind}`)
 }
 
 export async function findCategory(db: Db, name: string): Promise<{ id: number } | null> {
@@ -60,7 +66,7 @@ export async function addTransaction(
   t: { categoryId: number; kind: Kind; amountSatang: number; occurredAt: Date; note?: string; sourceMessageId?: number },
 ): Promise<{ id: number }> {
   checkAmount(t.amountSatang)
-  await requireCategory(db, t.categoryId)
+  await requireMatching(db, t.categoryId, t.kind)
   const r = await db
     .insertInto('transactions')
     .values({
@@ -82,15 +88,15 @@ export async function updateTransaction(
   p: { categoryId?: number; kind?: Kind; amountSatang?: number; occurredAt?: Date; note?: string | null },
 ): Promise<void> {
   if (p.amountSatang !== undefined) checkAmount(p.amountSatang)
-  if (p.categoryId !== undefined) await requireCategory(db, p.categoryId)
+  const cur = await db.selectFrom('transactions').select(['category_id', 'kind']).where('id', '=', id).where('deleted_at', 'is', null).executeTakeFirst()
+  if (!cur) throw new LedgerError('not_found', 'transaction not found')
+  await requireMatching(db, p.categoryId ?? Number(cur.category_id), p.kind ?? cur.kind) // effective values after the patch
   const set: Partial<Omit<Schema['transactions'], 'id'>> = {}
   if (p.categoryId !== undefined) set.category_id = p.categoryId
   if (p.kind !== undefined) set.kind = p.kind
   if (p.amountSatang !== undefined) set.amount_satang = p.amountSatang
   if (p.occurredAt !== undefined) set.occurred_at = p.occurredAt
   if (p.note !== undefined) set.note = p.note
-  const live = db.selectFrom('transactions').select('id').where('id', '=', id).where('deleted_at', 'is', null)
-  if (!(await live.executeTakeFirst())) throw new LedgerError('not_found', 'transaction not found')
   if (Object.keys(set).length) await db.updateTable('transactions').set(set).where('id', '=', id).where('deleted_at', 'is', null).execute()
 }
 
@@ -110,7 +116,7 @@ export async function restoreTransaction(db: Db, id: number): Promise<void> {
 
 export async function setBudget(db: Db, categoryId: number, month: string, limitSatang: number): Promise<void> {
   checkAmount(limitSatang)
-  await requireCategory(db, categoryId)
+  await requireMatching(db, categoryId, 'expense')
   await db
     .insertInto('budgets')
     .values({ category_id: categoryId, month, limit_satang: limitSatang })

@@ -6,7 +6,8 @@ import * as m001 from './migrations/001_init.js'
 const migrations = [{ version: '001_init', up: m001.up }]
 
 export function createDb(url: string): Kysely<Schema> {
-  const pool = createPool({ uri: url, timezone: 'Z' })
+  // dateStrings DATE: habit_logs.day stays 'YYYY-MM-DD'; DATETIME still becomes a (UTC) Date
+  const pool = createPool({ uri: url, timezone: 'Z', dateStrings: ['DATE'] })
   // every pooled connection stores/defaults times in UTC (CURRENT_TIMESTAMP follows the session zone)
   pool.on('connection', (c) => c.query("SET time_zone = '+00:00'"))
   // cast: mysql2 3.24 Pool typings don't match kysely's MysqlPool, runtime is fine

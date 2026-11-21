@@ -45,7 +45,7 @@ export interface Schema {
     freq_value: string
     deleted_at: Nullable<Date>
   }
-  habit_logs: { id: Id; habit_id: number; day: string | Date }
+  habit_logs: { id: Id; habit_id: number; day: string } // DATE via dateStrings
   reminders: {
     id: Id
     kind: 'event' | 'task' | 'budget'

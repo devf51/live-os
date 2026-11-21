@@ -51,4 +51,12 @@ describe('schema', () => {
     const r = await db.selectFrom('chat_messages').select('created_at').where('id', '=', Number(insertId)).executeTakeFirstOrThrow()
     expect(Math.abs(r.created_at.getTime() - Date.now())).toBeLessThan(5000)
   })
+
+  it('declares exactly the six named foreign keys (MySQL ignores inline REFERENCES)', async () => {
+    const { rows } = await sql<{ n: string }>`select constraint_name as n from information_schema.referential_constraints where constraint_schema = database()`.execute(db)
+    expect(rows.map((r) => r.n).sort()).toEqual([
+      'fk_budgets_category', 'fk_events_source_message', 'fk_habit_logs_habit',
+      'fk_tasks_source_message', 'fk_transactions_category', 'fk_transactions_source_message',
+    ])
+  })
 })

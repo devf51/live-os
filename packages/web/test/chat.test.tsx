@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Chat } from '../src/pages/Chat'
 
@@ -166,4 +166,80 @@ it('load error shows retry which refetches', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'ลองใหม่' }))
   expect(await screen.findByRole('log')).toBeTruthy()
   expect(calls(LIST)).toHaveLength(2)
+})
+
+it('failed send merges with a draft typed meanwhile', async () => {
+  routes[LIST] = () => json(200, [])
+  let resolve!: (r: Response) => void
+  routes['/chat'] = () => new Promise<Response>((r) => { resolve = r })
+  render(<Chat />)
+  await screen.findByRole('log')
+  await userEvent.type(input(), 'อันแรก{Enter}')
+  await screen.findByText('กำลังคิด…')
+  await userEvent.type(input(), 'อันใหม่')
+  resolve(json(500))
+  await screen.findByRole('alert')
+  expect(input().value).toBe('อันแรก\nอันใหม่')
+})
+
+it('failed send after unmount stashes the text for the next mount', async () => {
+  routes[LIST] = () => json(200, [])
+  let reject!: (e: Error) => void
+  routes['/chat'] = () => new Promise<Response>((_, rj) => { reject = rj })
+  const a = render(<Chat />)
+  await screen.findByRole('log')
+  await userEvent.type(input(), 'ซื้อนม{Enter}')
+  await screen.findByText('กำลังคิด…')
+  a.unmount()
+  reject(new Error('net'))
+  await new Promise((r) => setTimeout(r, 0))
+  render(<Chat />)
+  await screen.findByRole('log')
+  expect(input().value).toBe('ซื้อนม')
+  cleanup()
+  render(<Chat />)
+  await screen.findByRole('log')
+  expect(input().value).toBe('')
+})
+
+it('แก้ keeps an existing draft after the previous text', async () => {
+  routes[LIST] = () => json(200, [U, B])
+  routes['/chat/actions/2/undo'] = () => json(200, { ok: true })
+  render(<Chat />)
+  await userEvent.type(await screen.findByLabelText('พิมพ์เล่าให้ฟังได้เลย…'), 'ร่าง')
+  await userEvent.click(screen.getByRole('button', { name: 'แก้' }))
+  await screen.findByText('ยกเลิกแล้ว')
+  expect(input().value).toBe('กินข้าว 80 บาท\nร่าง')
+})
+
+it('แก้ without a previous user message undoes and leaves the composer alone', async () => {
+  routes[LIST] = () => json(200, [B])
+  routes['/chat/actions/2/undo'] = () => json(200, { ok: true })
+  render(<Chat />)
+  await userEvent.click(await screen.findByRole('button', { name: 'แก้' }))
+  await screen.findByText('ยกเลิกแล้ว')
+  expect(input().value).toBe('')
+})
+
+it('IME Enter does not send, normal Enter does', async () => {
+  routes[LIST] = () => json(200, [])
+  routes['/chat'] = () => json(200, { reply: 'ok', messageId: 3, undoable: false })
+  render(<Chat />)
+  await screen.findByRole('log')
+  await userEvent.type(input(), 'สวัส')
+  fireEvent.keyDown(input(), { key: 'Enter', isComposing: true })
+  fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 })
+  expect(calls('/chat')).toHaveLength(0)
+  fireEvent.keyDown(input(), { key: 'Enter', keyCode: 13 })
+  await screen.findByText('ok')
+  expect(calls('/chat')).toHaveLength(1)
+})
+
+it('invalid or missing createdAt renders without a time', async () => {
+  routes[LIST] = () => json(200, [{ ...U, createdAt: 'nope' }, { ...B, createdAt: undefined, undoable: false }])
+  render(<Chat />)
+  const items = within(await screen.findByRole('log')).getAllByRole('listitem')
+  expect(items[0].textContent).toContain('กินข้าว 80 บาท')
+  expect(items[0].textContent).not.toMatch(/\d\d:\d\d/)
+  expect(items[1].textContent).not.toMatch(/\d\d:\d\d/)
 })

@@ -5,12 +5,16 @@ import { useLoad, Screen } from '../useLoad'
 type Msg = { id: number; role: 'user' | 'bot'; text: string; createdAt: string; undoable: boolean; cancelled?: boolean; pending?: boolean }
 
 const clock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+const fmtTime = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : clock.format(d) }
+const merge = (first: string, rest: string) => (first && rest ? `${first}\n${rest}` : first || rest)
+// a failed send after Chat unmounted (tab switch / logout): the next mount gets the text back
+let lostDraft = ''
 const EXAMPLES = ['กินข้าว 80 บาท', 'ศุกร์หน้าบ่ายสามหมอฟัน', 'วันนี้ออกกำลังกายแล้ว']
 const SEND_FAIL = 'ส่งไม่สำเร็จ ลองใหม่อีกครั้งนะ'
 
 export function Chat() {
   const l = useLoad<Msg[]>('/chat/messages?limit=50')
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => lostDraft)
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
@@ -19,9 +23,11 @@ export function Chat() {
   const undoing = useRef(new Set<number>())
   const box = useRef<HTMLTextAreaElement>(null)
   const end = useRef<HTMLLIElement>(null)
+  const mounted = useRef(false)
   const msgs = l.data
   const setMsgs = l.setData
 
+  useEffect(() => { mounted.current = true; lostDraft = ''; return () => { mounted.current = false } }, [])
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }) }, [msgs])
 
   async function send() {
@@ -41,7 +47,8 @@ export function Chat() {
     } catch (e) {
       // nothing was stored: drop both bubbles and give the text back
       setMsgs((p) => (p ?? []).filter((m) => m.id !== uid && m.id !== pid))
-      setText(t)
+      if (mounted.current) setText((cur) => merge(t, cur))
+      else lostDraft = merge(t, lostDraft)
       if (e instanceof ApiError && e.status === 503) {
         const note = e.body?.error ?? SEND_FAIL
         setMsgs((p) => [...(p ?? []), { id: --tmp.current, role: 'bot', text: note, createdAt: new Date().toISOString(), undoable: false }])
@@ -56,6 +63,7 @@ export function Chat() {
   async function undo(m: Msg, edit: boolean) {
     if (undoing.current.has(m.id)) return
     undoing.current.add(m.id)
+    const prev = edit ? (msgs ?? []).slice(0, Math.max((msgs ?? []).findIndex((x) => x.id === m.id), 0)).reverse().find((x) => x.role === 'user') : undefined
     setBusy(m.id)
     setErr('')
     let gone = false
@@ -74,10 +82,7 @@ export function Chat() {
     if (!gone) return
     setMsgs((p) => (p ?? []).map((x) => (x.id === m.id ? { ...x, cancelled: true } : x)))
     if (edit) {
-      const i = (msgs ?? []).findIndex((x) => x.id === m.id)
-      const prev = (msgs ?? []).slice(0, i).reverse().find((x) => x.role === 'user')
-      if (prev) setText(prev.text)
-      box.current?.focus()
+      if (prev) { setText((cur) => merge(prev.text, cur)); box.current?.focus() }
     }
   }
 
@@ -105,7 +110,7 @@ export function Chat() {
                     <button disabled={busy === m.id} onClick={() => undo(m, true)}>แก้</button>
                   </div>
                 )}
-                {!m.pending && <small>{clock.format(new Date(m.createdAt))}</small>}
+                {!m.pending && <small>{fmtTime(m.createdAt)}</small>}
               </li>
             ))}
             <li ref={end} aria-hidden="true" />
@@ -116,7 +121,7 @@ export function Chat() {
             <textarea
               id="chat-input" ref={box} rows={1} maxLength={2000} placeholder="พิมพ์เล่าให้ฟังได้เลย…" value={text}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); send() } }}
             />
             <button type="submit" disabled={sending}>ส่ง</button>
           </form>

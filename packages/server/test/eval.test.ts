@@ -28,7 +28,7 @@ describe('eval compare', () => {
     expect(compare(c, ev('2026-11-22T02:00:00Z')).pass).toBe(true)
     expect(compare(c, ev('2026-11-23T09:00:00+07:00'))).toMatchObject({ pass: false, dateOk: false })
     expect(compare(c, ev('2026-11-22T10:00:00+07:00')).pass).toBe(false)
-    expect(compare(c, { kind: 'ask' }).pass).toBe(false)
+    expect(compare(c, { kind: 'ask', question: 'q' }).pass).toBe(false)
   })
   it('flags wrong amounts', async () => {
     const { compare } = await import('../eval/compare.js')
@@ -36,5 +36,14 @@ describe('eval compare', () => {
     const got = (amountSatang: number) => ({ kind: 'actions', actions: [{ type: 'add_transaction', kind: 'expense', category: 'อาหาร', amountSatang, occurredAt: '2026-11-21T12:00:00+07:00' }] })
     expect(compare(t, got(8000)).pass).toBe(true)
     expect(compare(t, got(80))).toMatchObject({ pass: false, money: true, moneyOk: false })
+  })
+  it('server acceptance comes first: offset-less datetime, datetime in log_habit.day and bad shapes FAIL; Buddhist years pass', async () => {
+    const { compare } = await import('../eval/compare.js')
+    expect(compare(c, ev('2026-11-22T09:00:00'))).toMatchObject({ pass: false, dateOk: false })
+    const h = loadCases().find((x) => x.id === 'habit-run')!
+    expect(compare(h, { kind: 'actions', actions: [{ type: 'log_habit', name: 'วิ่ง', day: '2026-11-21T00:00:00+07:00' }] }).pass).toBe(false)
+    expect(compare(h, { kind: 'actions', actions: [{ type: 'log_habit', name: 'วิ่ง', day: '2026-11-21' }] }).pass).toBe(true)
+    const b = loadCases().find((x) => x.id === 'ev-buddhist')!
+    expect(compare(b, ev('2570-01-03T08:00:00+07:00')).pass).toBe(true)
   })
 })

@@ -986,7 +986,58 @@
      "kind": "expense",
      "amountSatang": 90000,
      "category": "ค่าน้ำค่าไฟ",
-     "date": "2026-11-25"
+     "date": "2026-10-25"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "txd-day15",
+  "input": "วันที่ 15 ซื้อกาแฟ 70",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_transaction",
+     "kind": "expense",
+     "amountSatang": 7000,
+     "category": "อาหาร",
+     "date": "2026-11-15"
     }
    ]
   },
@@ -1544,6 +1595,575 @@
   "critical": true
  },
  {
+  "id": "amt-phan-khrueng",
+  "input": "ค่าข้าวพันครึ่ง",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_transaction",
+     "kind": "expense",
+     "amountSatang": 150000,
+     "category": "อาหาร",
+     "date": "2026-11-21"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "amt-song-phan-khrueng",
+  "input": "ค่าไฟสองพันครึ่ง",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_transaction",
+     "kind": "expense",
+     "amountSatang": 250000,
+     "category": "ค่าน้ำค่าไฟ",
+     "date": "2026-11-21"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "amt-roi-khrueng",
+  "input": "ค่าแท็กซี่ร้อยครึ่ง",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_transaction",
+     "kind": "expense",
+     "amountSatang": 15000,
+     "category": "เดินทาง",
+     "date": "2026-11-21"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "amt-saen",
+  "input": "ซื้อโน้ตบุ๊กแสนนึง",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_transaction",
+     "kind": "expense",
+     "amountSatang": 10000000,
+     "category": "ช้อปปิ้ง",
+     "date": "2026-11-21"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-next-tue-ask",
+  "input": "ศุกร์หน้า 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-24T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "ask"
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-next-mon-ask",
+  "input": "ศุกร์หน้า 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-23T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "ask"
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-next-thu-ask",
+  "input": "ศุกร์หน้า 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-26T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "ask"
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-this-tue",
+  "input": "ศุกร์นี้ 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-24T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_event",
+     "kind": "appointment",
+     "date": "2026-11-27",
+     "time": "10:00"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-this-thu",
+  "input": "ศุกร์นี้ 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-26T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_event",
+     "kind": "appointment",
+     "date": "2026-11-27",
+     "time": "10:00"
+    }
+   ]
+  },
+  "critical": true
+ },
+ {
+  "id": "fri-this-sat-past-ask",
+  "input": "ศุกร์นี้ 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-21T14:30:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "ask"
+  }
+ },
+ {
+  "id": "fri-next-sun",
+  "input": "ศุกร์หน้า 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-22T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_event",
+     "kind": "appointment",
+     "date": "2026-11-27",
+     "time": "10:00"
+    }
+   ]
+  }
+ },
+ {
+  "id": "fri-next-fri",
+  "input": "ศุกร์หน้า 10 โมง นัดกินข้าวกับแม่",
+  "nowIso": "2026-11-27T10:00:00+07:00",
+  "context": {
+   "categories": [
+    {
+     "name": "อาหาร",
+     "kind": "expense"
+    },
+    {
+     "name": "เดินทาง",
+     "kind": "expense"
+    },
+    {
+     "name": "ช้อปปิ้ง",
+     "kind": "expense"
+    },
+    {
+     "name": "ค่าน้ำค่าไฟ",
+     "kind": "expense"
+    },
+    {
+     "name": "เงินเดือน",
+     "kind": "income"
+    },
+    {
+     "name": "ฟรีแลนซ์",
+     "kind": "income"
+    }
+   ],
+   "habits": [
+    "วิ่ง",
+    "อ่านหนังสือ",
+    "ออกกำลังกาย"
+   ]
+  },
+  "expect": {
+   "kind": "actions",
+   "actions": [
+    {
+     "type": "add_event",
+     "kind": "appointment",
+     "date": "2026-12-04",
+     "time": "10:00"
+    }
+   ]
+  }
+ },
+ {
   "id": "task-due",
   "input": "ต้องส่งรายงานภายในวันศุกร์หน้า",
   "nowIso": "2026-11-21T14:30:00+07:00",
@@ -1868,7 +2488,7 @@
   "critical": true
  },
  {
-  "id": "ask-yesterday-spend",
+  "id": "ask-just-now-spend",
   "input": "เมื่อกี้จ่ายไปเยอะเลย",
   "nowIso": "2026-11-21T14:30:00+07:00",
   "context": {

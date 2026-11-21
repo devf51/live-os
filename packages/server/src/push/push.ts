@@ -1,5 +1,5 @@
 import type { Kysely } from 'kysely'
-import webpush from 'web-push'
+import { getVapidHeaders, sendNotification as webPushSend, type PushSubscription, type RequestOptions } from 'web-push'
 import type { Schema } from '../db/schema.js'
 import { dueReminders, type ReminderSettings } from '../reminders/reminders.js'
 
@@ -8,27 +8,36 @@ export type PushSub = { endpoint: string; p256dh: string; auth: string }
 export type PushPayload = { title: string; body: string; url: string }
 export type SendOutcome = 'ok' | 'gone' | 'retry'
 export interface PushSender {
-  send(sub: PushSub, payload: PushPayload, opts?: { ttl?: number }): Promise<SendOutcome>
+  send(sub: PushSub, payload: PushPayload, opts?: { ttl?: number; urgency?: 'high' | 'normal' }): Promise<SendOutcome>
 }
 
-type SendNotification = (sub: webpush.PushSubscription, payload: string, options: webpush.RequestOptions) => Promise<unknown>
+type SendNotification = (sub: PushSubscription, payload: string, options: RequestOptions) => Promise<unknown>
 const REQUEST_TIMEOUT_MS = 10_000
 
 export class WebPushSender implements PushSender {
   private readonly details: { subject: string; publicKey: string; privateKey: string }
   private readonly sendNotification: SendNotification
-  constructor(vapid: { publicKey: string; privateKey: string; subject: string }, sendNotification: SendNotification = webpush.sendNotification) {
+  private readonly log: (msg: string) => void
+  constructor(vapid: { publicKey: string; privateKey: string; subject: string }, sendNotification: SendNotification = webPushSend, log: (msg: string) => void = console.warn) {
+    try {
+      getVapidHeaders('https://fcm.googleapis.com', vapid.subject, vapid.publicKey, vapid.privateKey, 'aes128gcm')
+    } catch {
+      // deliberately not echoing the library message or any value
+      throw new Error('Invalid VAPID configuration: check VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (url-safe base64 pair from `npm run vapid`) and VAPID_SUBJECT (mailto: or https: URL)')
+    }
     this.details = vapid
     this.sendNotification = sendNotification
+    this.log = log
   }
-  async send(sub: PushSub, payload: PushPayload, opts?: { ttl?: number }): Promise<SendOutcome> {
+  async send(sub: PushSub, payload: PushPayload, opts?: { ttl?: number; urgency?: 'high' | 'normal' }): Promise<SendOutcome> {
     try {
       await this.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload), {
-        TTL: opts?.ttl ?? 120, urgency: 'high', timeout: REQUEST_TIMEOUT_MS, vapidDetails: this.details,
+        TTL: opts?.ttl ?? 120, urgency: opts?.urgency ?? 'high', timeout: REQUEST_TIMEOUT_MS, vapidDetails: this.details,
       })
       return 'ok'
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode
+      this.log(`push send failed: ${status ? `HTTP ${status}` : 'no HTTP status (network/timeout)'}`)
       return status === 404 || status === 410 ? 'gone' : 'retry'
     }
   }
@@ -52,22 +61,22 @@ export async function dispatchDue(db: Db, now: Date, sender: PushSender, setting
   const gone = new Set<number>()
   for (const d of due) {
     const row = byId.get(d.id)
-    let payload: PushPayload, ttl: number
+    let payload: PushPayload, opts: { ttl: number; urgency: 'high' | 'normal' }
     if (d.kind === 'event') {
       const ev = await db.selectFrom('events').select('title').where('id', '=', d.refId).where('deleted_at', 'is', null).executeTakeFirst()
       if (!ev || !row?.occurs_at) { log(`reminder ${d.id} (event): referent missing, skipped`); continue }
       payload = { title: ev.title, body: eventBody(row.occurs_at, now), url: '/' }
-      ttl = EVENT_TTL
+      opts = { ttl: EVENT_TTL, urgency: 'high' }
     } else {
       const cat = await db.selectFrom('categories').select('name').where('id', '=', d.refId).executeTakeFirst()
-      if (!cat) { log(`reminder ${d.id} (budget): referent missing, skipped`); continue }
+      if (!cat || row?.level == null) { log(`reminder ${d.id} (budget): category or level missing, skipped`); continue }
       payload = { title: 'งบประมาณ', body: `งบหมวด ${cat.name} ถึง ${row?.level}%`, url: '/' }
-      ttl = BUDGET_TTL
+      opts = { ttl: BUDGET_TTL, urgency: 'normal' }
     }
     let ok = false, retry = false
     for (const s of subs) {
       if (gone.has(Number(s.id))) continue
-      const out = await sender.send(s, payload, { ttl }).catch((): SendOutcome => 'retry')
+      const out = await sender.send(s, payload, opts).catch((): SendOutcome => 'retry')
       if (out === 'ok') ok = true
       else if (out === 'retry') retry = true
       else {

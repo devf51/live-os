@@ -32,7 +32,7 @@ describe('startScheduler', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(now.mock.calls.length).toBe(2)
     expect(sender.calls.length).toBe(1) // nothing new, nothing resent
-    s.stop()
+    await s.stop()
     await vi.advanceTimersByTimeAsync(5000)
     expect(now.mock.calls.length).toBe(2)
   })
@@ -49,7 +49,27 @@ describe('startScheduler', () => {
     expect(started).toBe(1)
     release()
     await settle()
-    s.stop()
+    await s.stop()
+  })
+  it('stop() waits for the in-flight tick and starts no new one', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    const sender = new FakeSender()
+    const now = vi.fn(() => T)
+    vi.spyOn(sender, 'send').mockImplementation(async () => { await gate; return 'ok' })
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const s = startScheduler({ db, sender, now, intervalMs: 1000 })
+    await until(() => vi.mocked(sender.send).mock.calls.length === 1)
+    let stopped = false
+    const p = s.stop().then(() => { stopped = true })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(stopped).toBe(false)
+    release()
+    await p
+    // the in-flight tick finished its UPDATE before stop() resolved
+    expect((await db.selectFrom('reminders').select('sent_at').executeTakeFirstOrThrow()).sent_at).toEqual(T)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(now).toHaveBeenCalledTimes(1)
   })
   it('an error in a tick is logged and the loop survives', async () => {
     const logs: string[] = []
@@ -62,6 +82,6 @@ describe('startScheduler', () => {
     expect(logs[0]).toContain('clock exploded')
     await vi.advanceTimersByTimeAsync(1000)
     await until(() => sender.calls.length === 1)
-    s.stop()
+    await s.stop()
   })
 })

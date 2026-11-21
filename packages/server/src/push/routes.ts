@@ -3,9 +3,13 @@ import { z } from 'zod'
 import type { AppDeps } from '../app.js'
 
 const subscribeBody = z.object({
-  endpoint: z.url({ protocol: /^https$/ }),
+  endpoint: z.url({ protocol: /^https$/ }).max(512).refine((u) => {
+    const { hostname, port } = new URL(u)
+    // only public push services: no IP literals, localhost or .local; default port only
+    return !(port !== '' && port !== '443') && !/^[\d.]+$/.test(hostname) && !hostname.includes(':') && hostname !== 'localhost' && !hostname.endsWith('.local')
+  }, 'endpoint must be a public https push-service URL'),
   expirationTime: z.number().nullish(),
-  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  keys: z.object({ p256dh: z.string().min(1).max(255), auth: z.string().min(1).max(255) }),
 })
 const unsubscribeBody = z.object({ endpoint: z.string().min(1) })
 

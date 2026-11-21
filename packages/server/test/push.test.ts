@@ -5,6 +5,7 @@ import { FakeSender } from './helpers/push.js'
 import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
 import { hashPassword } from '../src/auth/auth.js'
+import { generateVAPIDKeys } from 'web-push'
 import { dispatchDue, WebPushSender } from '../src/push/push.js'
 import { DEFAULT_REMINDER_SETTINGS as S, planReminders } from '../src/reminders/reminders.js'
 
@@ -29,7 +30,7 @@ describe('dispatchDue', () => {
     await planReminders(db, T, S)
     const f = new FakeSender()
     expect(await dispatchDue(db, T, f, S)).toEqual({ sent: 1, failed: 0 })
-    expect(f.calls).toEqual([{ sub: expect.objectContaining({ endpoint: sub(1).endpoint }), payload: { title: 'ฟิสิกส์', body: 'อีก 30 นาที', url: '/' }, ttl: 120 }])
+    expect(f.calls).toEqual([{ sub: expect.objectContaining({ endpoint: sub(1).endpoint }), payload: { title: 'ฟิสิกส์', body: 'อีก 30 นาที', url: '/' }, ttl: 120, urgency: 'high' }])
     expect((await reminder()).sent_at).toEqual(T)
     expect(await dispatchDue(db, new Date(T.getTime() + 60_000), f, S)).toEqual({ sent: 0, failed: 0 })
     expect(f.calls.length).toBe(1)
@@ -115,8 +116,37 @@ describe('dispatchDue', () => {
   })
 })
 
+describe('dispatchDue robustness', () => {
+  it('a throwing sender counts as retry and does not abort the batch', async () => {
+    await addSubs(1, 2)
+    await addEvent('A', '2026-11-25T03:30:00Z')
+    await planReminders(db, T, S)
+    const f = new FakeSender()
+    const orig = f.send.bind(f)
+    f.send = async (s, p, o) => { if (s.endpoint === sub(1).endpoint) throw new Error('boom'); return orig(s, p, o) }
+    expect(await dispatchDue(db, T, f, S)).toEqual({ sent: 1, failed: 0 })
+    expect(f.calls.length).toBe(1)
+    await db.updateTable('reminders').set({ sent_at: null }).execute()
+    await db.deleteFrom('push_subscriptions').where('endpoint', '=', sub(2).endpoint).execute()
+    expect(await dispatchDue(db, T, f, S)).toEqual({ sent: 0, failed: 1 })
+  })
+  it('budget with null level is skipped with a log; urgency normal for budget, high for event', async () => {
+    await addSubs(1)
+    const id = await addCategory('อาหาร')
+    await db.insertInto('reminders').values({ kind: 'budget', ref_id: id, dedupe_key: 'b0', fire_at: T, level: null, attempts: 0 }).execute()
+    const f = new FakeSender(); const logs: string[] = []
+    await dispatchDue(db, T, f, S, (m) => logs.push(m))
+    expect(f.calls.length).toBe(0)
+    expect(logs.length).toBe(1)
+    await db.updateTable('reminders').set({ level: 100 }).execute()
+    await dispatchDue(db, T, f, S)
+    expect(f.calls[0]!.urgency).toBe('normal')
+  })
+})
+
 describe('WebPushSender', () => {
-  const vapid = { publicKey: 'pub', privateKey: 'priv', subject: 'mailto:a@b.c' }
+  const keys = generateVAPIDKeys()
+  const vapid = { ...keys, subject: 'mailto:a@b.co' }
   const payload = { title: 't', body: 'b', url: '/' }
   const run = (impl: () => Promise<unknown>, ttl?: number) => {
     const calls: unknown[][] = []
@@ -133,6 +163,26 @@ describe('WebPushSender', () => {
   })
   it.each([500, 400, 429])('%i -> retry', async (statusCode) => {
     expect((await run(() => Promise.reject(Object.assign(new Error('x'), { statusCode })))).r).toBe('retry')
+  })
+  it('invalid VAPID config throws without echoing values', () => {
+    for (const bad of [{ ...vapid, privateKey: 'SECRET-not-a-key' }, { ...vapid, subject: 'not-a-url' }, { ...vapid, publicKey: 'PUBLIC-bad' }]) {
+      let msg = ''
+      try { new WebPushSender(bad, async () => ({})) } catch (e) { msg = (e as Error).message }
+      expect(msg).toContain('Invalid VAPID')
+      for (const v of Object.values(bad)) if (v !== keys.publicKey && v !== keys.privateKey && v !== 'mailto:a@b.co') expect(msg).not.toContain(v)
+      expect(msg).not.toContain(keys.privateKey)
+    }
+  })
+  it('logs only the status code of a failed send', async () => {
+    const logs: string[] = []
+    const s = new WebPushSender(vapid, () => Promise.reject(Object.assign(new Error('boom ' + sub(1).endpoint), { statusCode: 403 })), (m) => logs.push(m))
+    expect(await s.send(sub(1), payload)).toBe('retry')
+    expect(logs).toEqual(['push send failed: HTTP 403'])
+  })
+  it('urgency option is passed through', async () => {
+    const calls: unknown[][] = []
+    await new WebPushSender(vapid, async (...a) => { calls.push(a) }).send(sub(1), payload, { urgency: 'normal' })
+    expect(calls[0]![2]).toMatchObject({ urgency: 'normal' })
   })
   it('network error / timeout -> retry', async () => {
     expect((await run(() => Promise.reject(new Error('ETIMEDOUT')))).r).toBe('retry')
@@ -164,6 +214,11 @@ describe('push routes', () => {
     expect((await call('POST', '/push/subscribe', { endpoint: sub(1).endpoint })).statusCode).toBe(400)
     expect((await call('POST', '/push/subscribe', { endpoint: sub(1).endpoint, keys: { p256dh: 'x' } })).statusCode).toBe(400)
     expect((await call('POST', '/push/subscribe')).statusCode).toBe(400)
+    for (const endpoint of ['https://127.0.0.1/x', 'https://localhost/x', 'https://nas.local/x', 'https://[::1]/x', 'https://push.example:8443/x', 'https://push.example/' + 'a'.repeat(520)])
+      expect((await call('POST', '/push/subscribe', body(1, { endpoint }))).statusCode, endpoint.slice(0, 40)).toBe(400)
+    expect((await call('POST', '/push/subscribe', body(1, { keys: { p256dh: 'x'.repeat(256), auth: 'a' } }))).statusCode).toBe(400)
+    expect((await call('POST', '/push/subscribe', body(9, { endpoint: 'https://push.example:443/9' }))).statusCode).toBe(200)
+    await call('DELETE', '/push/subscribe', { endpoint: 'https://push.example/9' })
   })
   it('subscribe twice upserts; delete is idempotent', async () => {
     expect((await call('POST', '/push/subscribe', body(1))).json()).toEqual({ ok: true })

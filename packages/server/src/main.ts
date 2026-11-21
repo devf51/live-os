@@ -14,7 +14,13 @@ const db = createDb(DATABASE_URL)
 await migrate(db)
 await seedDefaultCategories(db)
 
-const sender = new WebPushSender({ publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY, subject: VAPID_SUBJECT })
+let sender: WebPushSender
+try {
+  sender = new WebPushSender({ publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY, subject: VAPID_SUBJECT })
+} catch (e) {
+  console.error(e instanceof Error ? e.message : 'Invalid VAPID configuration')
+  process.exit(1)
+}
 const app = buildApp({
   db,
   sender,
@@ -24,11 +30,19 @@ const app = buildApp({
 })
 await app.listen({ port: Number(PORT ?? 3000), host: '0.0.0.0' })
 const scheduler = startScheduler({ db, sender, now: () => new Date() })
+let closing = false
 const shutdown = async () => {
-  scheduler.stop()
-  await app.close()
-  await db.destroy()
-  process.exit(0)
+  if (closing) return
+  closing = true
+  try {
+    await scheduler.stop() // let an in-flight tick finish its UPDATE before the pool closes
+    await app.close()
+    await db.destroy()
+    process.exit(0)
+  } catch (e) {
+    console.error('shutdown failed:', e instanceof Error ? e.message : e)
+    process.exit(1)
+  }
 }
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.on('SIGINT', () => void shutdown())
+process.on('SIGTERM', () => void shutdown())

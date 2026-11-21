@@ -22,14 +22,19 @@ const FAILED = 'จดไม่สำเร็จครับ ข้อมูล
 const EMPTY = 'ไม่แน่ใจว่าหมายถึงอะไรครับ ช่วยพิมพ์ใหม่อีกครั้งได้ไหม'
 const UNDOABLE = new Set(['transactions', 'events', 'tasks', 'habit_logs'])
 
-const errInfo = (e: unknown) => ({ name: e instanceof Error ? e.name : typeof e, message: e instanceof Error ? e.message.slice(0, 200) : '' }) // never the user's text or model payload
+// Stable identifiers only (name/code/errno/status): driver and client messages embed user text, so never log them.
+const errInfo = (e: unknown) => {
+  const x = (e ?? {}) as { code?: unknown; errno?: unknown; status?: unknown }
+  const pick = (v: unknown) => (typeof v === 'string' ? v.slice(0, 64) : typeof v === 'number' ? v : undefined)
+  return { name: e instanceof Error ? e.name : typeof e, code: pick(x.code), errno: pick(x.errno), status: pick(x.status) }
+}
 const parseCreated = (json: string | null): Created[] => (json ? (JSON.parse(json) as Created[]) : [])
 const hasUndoable = (c: Created[]) => c.some((x) => UNDOABLE.has(x.table))
 
 async function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: NodeJS.Timeout | undefined
   try {
-    return await Promise.race([p, new Promise<never>((_, rej) => { t = setTimeout(() => rej(new Error('llm timeout')), ms) })])
+    return await Promise.race([p, new Promise<never>((_, rej) => { t = setTimeout(() => rej(Object.assign(new Error('llm timeout'), { name: 'LlmTimeout' })), ms) })])
   } finally {
     clearTimeout(t)
   }

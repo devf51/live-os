@@ -87,7 +87,11 @@ export async function executeActions(db: Db, actions: Action[], ctx: { now: Date
         break
       }
       case 'add_category': {
-        if (await findCategory(db, a.name)) { lines.push(`มีหมวดนี้อยู่แล้ว: ${a.name}`); break }
+        const existing = await findCategory(db, a.name)
+        if (existing) {
+          lines.push(`มีหมวดนี้อยู่แล้ว: ${(await db.selectFrom('categories').select('name').where('id', '=', existing.id).executeTakeFirstOrThrow()).name}`)
+          break
+        }
         const { id } = await addCategory(db, a.name, a.kind)
         created.push({ table: 'categories', id })
         lines.push(`สร้างหมวดแล้ว: ${(await db.selectFrom('categories').select('name').where('id', '=', id).executeTakeFirstOrThrow()).name}`)

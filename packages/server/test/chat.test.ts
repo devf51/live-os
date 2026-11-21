@@ -312,6 +312,10 @@ describe('fix round 1: years, plausibility, logging, caps', () => {
     expect(out.reply).toMatch(/ยังมาไม่ถึง/)
     expect(await count('habit_logs')).toBe(0)
   })
+  it('existing category echoes the stored name, not the model text', async () => {
+    await addCategory(db, 'Cafe', 'expense')
+    expect((await run({ kind: 'actions', actions: [{ type: 'add_category', name: 'cafe', kind: 'expense' }] })).reply).toBe('มีหมวดนี้อยู่แล้ว: Cafe')
+  })
   it('add_category echoes the DB name; undo stamps undone_at from deps.now', async () => {
     expect((await run({ kind: 'actions', actions: [{ type: 'add_category', name: 'กาแฟ', kind: 'expense' }] })).reply).toBe('สร้างหมวดแล้ว: กาแฟ')
     const out = await run(txn())
@@ -331,11 +335,19 @@ describe('fix round 1: years, plausibility, logging, caps', () => {
       const broken = new Proxy(db, { get: (t, k) => { const v = Reflect.get(t, k) as unknown; return k === 'transaction' ? () => { throw new Error('db down') } : typeof v === 'function' ? v.bind(t) : v } })
       await go(new FakeLlm(() => txn()), {}, broken)
       expect(logs.map((l) => l.event)).toEqual(['llm_error', 'llm_error', 'llm_schema_invalid', 'action_error'])
-      expect(logs[0]!.detail).toEqual({ name: 'Error', message: 'rate limited' })
-      expect(logs[1]!.detail.message).toBe('llm timeout')
+      expect(logs[0]!.detail).toEqual({ name: 'Error' })
+      expect(logs[1]!.detail).toEqual({ name: 'LlmTimeout' })
       expect(logs[2]!.detail).toEqual({ issues: [{ path: 'actions.0.amountSatang', code: 'too_small' }] })
-      expect(logs[3]!.detail).toEqual({ name: 'Error', message: 'db down' })
+      expect(logs[3]!.detail).toEqual({ name: 'Error' })
       noLeak()
+    })
+    it('never logs driver/client messages that embed user text; keeps name/code/errno/status', async () => {
+      const dup = Object.assign(new Error("Duplicate entry 'ความลับ' for key 'categories.name'"), { code: 'ER_DUP_ENTRY', errno: 1062 })
+      const broken = new Proxy(db, { get: (t, k) => { const v = Reflect.get(t, k) as unknown; return k === 'transaction' ? () => { throw dup } : typeof v === 'function' ? v.bind(t) : v } })
+      await go(new FakeLlm(() => txn()), {}, broken)
+      await go(new FakeLlm(() => { throw Object.assign(new Error('bad request: ความลับ'), { status: 429 }) }))
+      expect(logs.map((l) => l.detail)).toEqual([{ name: 'Error', code: 'ER_DUP_ENTRY', errno: 1062 }, { name: 'Error', status: 429 }])
+      expect(JSON.stringify(logs)).not.toContain('ความลับ')
     })
     it('asks are not errors and are not logged', async () => {
       await go(new FakeLlm(() => txn({ category: 'ลึกลับ' })))

@@ -10,6 +10,9 @@ type Db = Kysely<Schema>
 type NewReminder = Insertable<Schema['reminders']>
 
 const MIN = 60_000
+// An event reminder lives while now < occurrence + grace (two scheduler ticks): lead 0 and a drifting tick still deliver.
+const EVENT_GRACE_MS = 120_000
+const WEEK = 7 * 24 * 60 * MIN
 const HORIZON = 10080 * MIN + MIN // one week of lead + the 60s planning slack
 
 const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))
@@ -28,10 +31,10 @@ export async function planReminders(db: Db, now: Date, settings: ReminderSetting
   const events = await db.selectFrom('events').selectAll().where('deleted_at', 'is', null).execute()
   for (const e of events) {
     const lead = (e.lead_minutes ?? settings.defaultLeadMinutes) * MIN
-    const occs = occurrencesBetween({ startsAt: e.starts_at, repeatWeekly: Boolean(e.repeat_weekly) }, now, new Date(now.getTime() + HORIZON))
+    const occs = occurrencesBetween({ startsAt: e.starts_at, repeatWeekly: Boolean(e.repeat_weekly) }, new Date(now.getTime() - EVENT_GRACE_MS), new Date(now.getTime() + HORIZON))
     for (const occ of occs) {
       const fireAt = occ.getTime() - lead
-      if (occ.getTime() <= now.getTime() || fireAt > horizon) continue
+      if (occ.getTime() + EVENT_GRACE_MS <= now.getTime() || fireAt > horizon) continue
       want.push({ kind: 'event', ref_id: Number(e.id), dedupe_key: `event:${e.id}:${occ.toISOString()}`, fire_at: new Date(fireAt), level: null, occurs_at: occ, attempts: 0 })
     }
   }
@@ -59,9 +62,19 @@ export async function dueReminders(db: Db, now: Date, settings: ReminderSettings
       .where('kind', '=', 'budget').where('sent_at', '>=', from).where('sent_at', '<', to).executeTakeFirstOrThrow()
     budgetRoom = Math.max(0, settings.dailyCap - Number(sent.n))
   }
+  const evIds = [...new Set(rows.filter((r) => r.kind === 'event').map((r) => Number(r.ref_id)))]
+  const evs = new Map((evIds.length === 0 ? [] : await db.selectFrom('events').select(['id', 'starts_at', 'repeat_weekly'])
+    .where('id', 'in', evIds).where('deleted_at', 'is', null).execute()).map((e) => [Number(e.id), e]))
+  // the occurrence must still exist: event alive and (one-off: same start; weekly: a 7-day multiple at/after start)
+  const stillOccurs = (refId: number, occ: Date) => {
+    const e = evs.get(refId)
+    if (!e) return false
+    const d = occ.getTime() - e.starts_at.getTime()
+    return e.repeat_weekly ? d >= 0 && d % WEEK === 0 : d === 0
+  }
   const out: { id: number; kind: string; refId: number }[] = []
   for (const r of rows) {
-    if (r.kind === 'event') { if (!r.occurs_at || r.occurs_at.getTime() <= now.getTime()) continue }
+    if (r.kind === 'event') { if (!r.occurs_at || r.occurs_at.getTime() + EVENT_GRACE_MS <= now.getTime() || !stillOccurs(Number(r.ref_id), r.occurs_at)) continue }
     else if (r.kind === 'budget') { if (budgetRoom-- <= 0) continue }
     else continue // tasks never get reminders
     out.push({ id: Number(r.id), kind: r.kind, refId: Number(r.ref_id) })

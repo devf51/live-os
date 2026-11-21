@@ -5,7 +5,7 @@ import { migrate } from '../src/db/client.js'
 import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
 import { hashPassword } from '../src/auth/auth.js'
-import { addEvent } from '../src/planner/planner.js'
+import { addEvent, deleteEvent } from '../src/planner/planner.js'
 import { addCategory, addTransaction, setBudget } from '../src/ledger/ledger.js'
 import { DEFAULT_REMINDER_SETTINGS, dueReminders, inQuietHours, planReminders } from '../src/reminders/reminders.js'
 import { loadSettings, saveSettings } from '../src/reminders/settings.js'
@@ -97,7 +97,7 @@ describe('planReminders: events', () => {
     await klass()
     expect(await planReminders(db, now, S)).toBe(1)
     await db.deleteFrom('reminders').execute()
-    expect(await planReminders(db, at('2026-11-23T02:00:00Z'), S)).toBe(0) // occ == now
+    expect(await planReminders(db, at('2026-11-23T02:02:00Z'), S)).toBe(0) // occ + grace <= now
     expect(await planReminders(db, at('2026-11-23T02:05:00Z'), S)).toBe(0)
   })
   it('weekly class: right occurrence, next week separate', async () => {
@@ -146,7 +146,7 @@ describe('dueReminders', () => {
     expect(inQuietHours(n, S)).toBe(true)
     await planReminders(db, n, S)
     expect(await dueReminders(db, n, S)).toHaveLength(1)
-    expect(await dueReminders(db, at('2026-11-22T00:00:00Z'), S)).toHaveLength(0)
+    expect(await dueReminders(db, at('2026-11-22T00:02:00Z'), S)).toHaveLength(0) // past start + grace
     expect(await dueReminders(db, at('2026-11-21T23:20:00Z'), S)).toHaveLength(0) // before fire_at
   })
   it('event row shape and attempts/sent filters', async () => {
@@ -187,6 +187,72 @@ describe('dueReminders', () => {
     await klass({ startsAt: at('2026-11-15T06:30:00Z') })
     await planReminders(db, n, S)
     expect((await dueReminders(db, n, S)).map((d) => d.kind)).toEqual(['event'])
+  })
+})
+
+// simulate the scheduler: plan, pick due, mark delivered (as Task 8 does)
+async function run(startIso: string, endIso: string, stepSec: number, settings = S) {
+  const delivered: number[] = []
+  for (let t = at(startIso).getTime(); t <= at(endIso).getTime(); t += stepSec * 1000) {
+    const now = new Date(t)
+    await planReminders(db, now, settings)
+    for (const d of await dueReminders(db, now, settings)) {
+      delivered.push(d.id)
+      await db.updateTable('reminders').set({ sent_at: now }).where('id', '=', d.id).execute()
+    }
+  }
+  return delivered
+}
+
+describe('grace and tick simulation', () => {
+  it('lead 0 (per-event) delivered exactly once with 60s ticks', async () => {
+    await klass({ leadMinutes: 0 })
+    expect(await run('2026-11-23T01:55:00.500Z', '2026-11-23T02:06:00Z', 60)).toHaveLength(1)
+  })
+  it('defaultLeadMinutes 0 via settings', async () => {
+    await klass()
+    expect(await run('2026-11-23T01:55:00.500Z', '2026-11-23T02:06:00Z', 60, { ...S, defaultLeadMinutes: 0 })).toHaveLength(1)
+  })
+  it('lead 1 with 90s jitter delivered exactly once', async () => {
+    await klass({ leadMinutes: 1 })
+    expect(await run('2026-11-23T01:50:00Z', '2026-11-23T02:06:00Z', 90)).toHaveLength(1)
+  })
+  it('not delivered once now >= occurs_at + grace', async () => {
+    await klass({ leadMinutes: 0 })
+    await planReminders(db, at('2026-11-23T02:00:00Z'), S)
+    expect(await dueReminders(db, at('2026-11-23T02:01:59Z'), S)).toHaveLength(1)
+    expect(await dueReminders(db, at('2026-11-23T02:02:00Z'), S)).toHaveLength(0)
+  })
+})
+
+describe('stale reminders', () => {
+  const n = at('2026-11-23T01:35:00Z')
+  it('delete after plan -> not due', async () => {
+    const { id } = await klass()
+    await planReminders(db, n, S)
+    await deleteEvent(db, id)
+    expect(await dueReminders(db, n, S)).toEqual([])
+  })
+  it('move after plan -> old row not due, new occurrence planned and due', async () => {
+    const { id } = await klass()
+    await planReminders(db, n, S)
+    await db.updateTable('events').set({ starts_at: at('2026-11-23T03:00:00Z') }).where('id', '=', id).execute()
+    expect(await dueReminders(db, n, S)).toEqual([])
+    const later = at('2026-11-23T02:31:00Z')
+    expect(await planReminders(db, later, S)).toBe(1)
+    const due = await dueReminders(db, later, S)
+    expect(due).toHaveLength(1)
+    expect((await rows()).find((r) => r.id === due[0]!.id)!.occurs_at).toEqual(at('2026-11-23T03:00:00Z'))
+  })
+  it('weekly: moved by non-multiple of a week -> old row not due; multiple of a week still due', async () => {
+    const { id } = await klass({ repeatWeekly: true })
+    await planReminders(db, n, S)
+    await db.updateTable('events').set({ starts_at: at('2026-11-09T02:00:00Z') }).where('id', '=', id).execute() // 14 days earlier
+    expect(await dueReminders(db, n, S)).toHaveLength(1)
+    await db.updateTable('events').set({ starts_at: at('2026-11-09T02:30:00Z') }).where('id', '=', id).execute()
+    expect(await dueReminders(db, n, S)).toEqual([])
+    await db.updateTable('events').set({ starts_at: at('2026-11-24T02:00:00Z') }).where('id', '=', id).execute() // starts after occurrence
+    expect(await dueReminders(db, n, S)).toEqual([])
   })
 })
 

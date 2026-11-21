@@ -5,17 +5,10 @@ import { Settings } from './pages/Settings'
 import { Today } from './pages/Today'
 import { Money } from './pages/Money'
 import { Habits } from './pages/Habits'
+import { Chat } from './pages/Chat'
 
-const soon = (title: string) => () => (
-  <main className="page">
-    <h1>{title}</h1>
-    <p>เร็วๆ นี้ รอเจอกันนะ</p>
-  </main>
-)
-
-// Task 11 replaces the chat placeholder
 const TABS = [
-  { id: 'chat', label: 'แชท', icon: '💬', Page: soon('แชท') },
+  { id: 'chat', label: 'แชท', icon: '💬', Page: Chat },
   { id: 'today', label: 'วันนี้', icon: '🌤️', Page: Today },
   { id: 'money', label: 'เงิน', icon: '💰', Page: Money },
   { id: 'habits', label: 'นิสัย', icon: '🌱', Page: Habits },

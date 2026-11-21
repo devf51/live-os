@@ -16,6 +16,7 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/auth/login') { loggedIn = true; return json(200, { ok: true }) }
+    if (url.startsWith('/chat/messages')) return json(200, [])
     return loggedIn ? json(200, { ok: true }) : json(401, { error: 'unauthorized' })
   }))
 })

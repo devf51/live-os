@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { api, UNAUTHORIZED_EVENT } from './api'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
+import { Today } from './pages/Today'
+import { Money } from './pages/Money'
+import { Habits } from './pages/Habits'
 
 const soon = (title: string) => () => (
   <main className="page">
@@ -10,12 +13,12 @@ const soon = (title: string) => () => (
   </main>
 )
 
-// Tasks 10/11 replace the placeholders
+// Task 11 replaces the chat placeholder
 const TABS = [
   { id: 'chat', label: 'แชท', icon: '💬', Page: soon('แชท') },
-  { id: 'today', label: 'วันนี้', icon: '🌤️', Page: soon('วันนี้') },
-  { id: 'money', label: 'เงิน', icon: '💰', Page: soon('เงิน') },
-  { id: 'habits', label: 'นิสัย', icon: '🌱', Page: soon('นิสัย') },
+  { id: 'today', label: 'วันนี้', icon: '🌤️', Page: Today },
+  { id: 'money', label: 'เงิน', icon: '💰', Page: Money },
+  { id: 'habits', label: 'นิสัย', icon: '🌱', Page: Habits },
   { id: 'settings', label: 'ตั้งค่า', icon: '⚙️', Page: null },
 ] as const
 

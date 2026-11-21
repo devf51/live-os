@@ -5,7 +5,7 @@ import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
 import { testPush } from './helpers/push.js'
 import { hashPassword } from '../src/auth/auth.js'
-import { addHabit, currentStreak, habitsDue, logHabit } from '../src/habits/habits.js'
+import { addHabit, currentStreak, deleteHabit, findHabitByName, habitsDue, logHabit, unlogHabit } from '../src/habits/habits.js'
 
 let db: Kysely<Schema>
 beforeAll(async () => { db = await testDb() })
@@ -205,5 +205,26 @@ describe('habit routes', () => {
       await a.close()
     }
     expect((await db.selectFrom('habit_logs').select('day').orderBy('day').execute()).map((r) => r.day)).toEqual(['2026-11-22', '2026-11-23'])
+  })
+})
+
+describe('findHabitByName / unlogHabit', () => {
+  it('matches trimmed, case-insensitive, non-deleted; first id wins', async () => {
+    await db.deleteFrom('habit_logs').execute()
+    await db.deleteFrom('habits').execute()
+    const a = await addHabit(db, { name: 'Gym', freqType: 'daily', freqValue: '' })
+    await addHabit(db, { name: 'gym', freqType: 'daily', freqValue: '' })
+    expect(await findHabitByName(db, '  GYM ')).toEqual({ id: a.id, name: 'Gym' })
+    await deleteHabit(db, a.id)
+    expect((await findHabitByName(db, 'gym'))!.id).not.toBe(a.id)
+    expect(await findHabitByName(db, 'nope')).toBeNull()
+  })
+  it('unlogHabit removes only that day', async () => {
+    await db.deleteFrom('habit_logs').execute()
+    const h = await addHabit(db, { name: 'Run', freqType: 'daily', freqValue: '' })
+    await logHabit(db, h.id, '2026-11-20', '2026-11-21')
+    await logHabit(db, h.id, '2026-11-21', '2026-11-21')
+    await unlogHabit(db, h.id, '2026-11-21')
+    expect((await db.selectFrom('habit_logs').select('day').execute()).map((r) => r.day)).toEqual(['2026-11-20'])
   })
 })

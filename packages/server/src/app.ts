@@ -6,6 +6,7 @@ import { authRoutes } from './auth/routes.js'
 import { registerLedgerRoutes } from './ledger/routes.js'
 import { registerPlannerRoutes } from './planner/routes.js'
 import { registerHabitRoutes } from './habits/routes.js'
+import { registerReminderRoutes } from './reminders/routes.js'
 
 export interface AppDeps {
   db: Kysely<Schema>
@@ -26,5 +27,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerLedgerRoutes(app, deps)
   registerPlannerRoutes(app, deps)
   registerHabitRoutes(app, deps)
+  registerReminderRoutes(app, deps)
   return app
 }

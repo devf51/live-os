@@ -2,8 +2,12 @@ import { Kysely, MysqlDialect } from 'kysely'
 import { createPool } from 'mysql2'
 import type { Schema } from './schema.js'
 import * as m001 from './migrations/001_init.js'
+import * as m002 from './migrations/002_reminder_fields.js'
 
-const migrations = [{ version: '001_init', up: m001.up }]
+const migrations = [
+  { version: '001_init', up: m001.up },
+  { version: '002_reminder_fields', up: m002.up },
+]
 
 export function createDb(url: string): Kysely<Schema> {
   // dateStrings DATE: habit_logs.day stays 'YYYY-MM-DD'; DATETIME still becomes a (UTC) Date

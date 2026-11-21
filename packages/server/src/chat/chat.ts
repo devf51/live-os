@@ -50,12 +50,17 @@ export async function handleMessage(deps: ChatDeps, text: string): Promise<{ rep
   const { db, llm, now } = deps
   const recent = (await db.selectFrom('chat_messages').select(['role', 'text']).orderBy('id', 'desc').limit(10).execute()).reverse() // before storing: excludes this message
   const userId = Number((await db.insertInto('chat_messages').values({ role: 'user', text, actions_json: null, undone_at: null }).executeTakeFirstOrThrow()).insertId)
+  const CAP = 200
+  const context = {
+    categories: (await db.selectFrom('categories').select(['name', 'kind']).orderBy('id').limit(CAP).execute()),
+    habits: (await db.selectFrom('habits').select('name').where('deleted_at', 'is', null).orderBy('id').limit(CAP).execute()).map((h) => h.name),
+  }
   const at = now()
   const nowIso = new Date(at.getTime() + 7 * 3600_000).toISOString().replace(/\.\d{3}Z$/, '+07:00')
 
   let raw: unknown
   try {
-    raw = await timeout(llm.interpret({ text, nowIso, recent }), deps.timeoutMs ?? 20_000)
+    raw = await timeout(llm.interpret({ text, nowIso, recent, context }), deps.timeoutMs ?? 20_000)
   } catch (e) {
     deps.log?.('llm_error', errInfo(e))
     return storeBot(db, APOLOGY)

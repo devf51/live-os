@@ -1,4 +1,5 @@
 import { buildApp } from './app.js'
+import { AnthropicLlm } from './llm/anthropic.js'
 import { createDb, migrate } from './db/client.js'
 import { seedDefaultCategories } from './ledger/ledger.js'
 import { WebPushSender } from './push/push.js'
@@ -21,7 +22,12 @@ try {
   console.error(e instanceof Error ? e.message : 'Invalid VAPID configuration')
   process.exit(1)
 }
+const { ANTHROPIC_API_KEY, ANTHROPIC_MODEL } = process.env
+const llm = ANTHROPIC_API_KEY ? new AnthropicLlm({ apiKey: ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL }) : undefined
+if (!llm) console.warn('ANTHROPIC_API_KEY is not set: POST /chat will answer 503 until it is configured')
 const app = buildApp({
+  llm,
+  log: (event, detail) => console.warn(JSON.stringify({ event, ...detail })), // already sanitised in chat.ts; Fastify's own logger stays off
   db,
   sender,
   vapidPublicKey: VAPID_PUBLIC_KEY,

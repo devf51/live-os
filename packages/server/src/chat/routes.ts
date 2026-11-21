@@ -19,7 +19,7 @@ export function registerChatRoutes(app: FastifyInstance, deps: AppDeps) {
     r.post('/chat', async (req, reply) => {
       const b = body.parse(req.body)
       if (!deps.llm) return reply.code(503).send({ error: 'ยังไม่ได้ตั้งค่าโมเดล' })
-      return handleMessage({ db, llm: deps.llm, now, log: (event, detail) => app.log.warn({ ...detail, event }) }, b.text)
+      return handleMessage({ db, llm: deps.llm, now, log: deps.log ?? ((event, detail) => app.log.warn({ ...detail, event })) }, b.text)
     })
     r.get('/chat/messages', async (req) => {
       const { limit } = limitQuery.parse(req.query)

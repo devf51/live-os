@@ -17,6 +17,7 @@ export interface AppDeps {
   ownerPasswordHash: string
   sessionSecret: string
   llm?: LlmClient
+  log?: (event: string, detail: Record<string, unknown>) => void // chat log sink (details are pre-sanitised); default: Fastify logger
   sender: PushSender
   vapidPublicKey: string
   now?: () => Date

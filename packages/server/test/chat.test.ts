@@ -212,6 +212,17 @@ describe('LLM failure, timeout, context', () => {
     expect(last.recent.at(-1)!.text).toBe('ok')
     expect(llm.calls[0]!.recent).toEqual([])
   })
+  it('passes the DB categories and live habit names as context', async () => {
+    await addHabit(db, { name: 'วิ่ง', freqType: 'daily', freqValue: '' })
+    const gone = await addHabit(db, { name: 'เลิกแล้ว', freqType: 'daily', freqValue: '' })
+    await db.updateTable('habits').set({ deleted_at: new Date() }).where('id', '=', gone.id).execute()
+    const llm = new FakeLlm(() => ({ kind: 'chat', reply: 'ok' }))
+    await handleMessage({ db, llm, now }, 'hi')
+    expect(llm.calls[0]!.context).toEqual({
+      categories: [{ name: 'อาหาร', kind: 'expense' }, { name: 'เงินเดือน', kind: 'income' }],
+      habits: ['วิ่ง'],
+    })
+  })
 })
 
 describe('routes', () => {

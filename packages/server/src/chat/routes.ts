@@ -19,7 +19,7 @@ export function registerChatRoutes(app: FastifyInstance, deps: AppDeps) {
     r.post('/chat', async (req, reply) => {
       const b = body.parse(req.body)
       if (!deps.llm) return reply.code(503).send({ error: 'ยังไม่ได้ตั้งค่าโมเดล' })
-      return handleMessage({ db, llm: deps.llm, now }, b.text)
+      return handleMessage({ db, llm: deps.llm, now, log: (event, detail) => app.log.warn({ ...detail, event }) }, b.text)
     })
     r.get('/chat/messages', async (req) => {
       const { limit } = limitQuery.parse(req.query)
@@ -30,7 +30,7 @@ export function registerChatRoutes(app: FastifyInstance, deps: AppDeps) {
       }))
     })
     r.post('/chat/actions/:id/undo', async (req) => {
-      await undoMessage({ db }, id.parse((req.params as { id: string }).id))
+      await undoMessage({ db, now }, id.parse((req.params as { id: string }).id))
       return { ok: true }
     })
   })

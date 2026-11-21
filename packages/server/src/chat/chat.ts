@@ -8,7 +8,7 @@ import { llmResultSchema } from './actions.js'
 import { AskError, executeActions, type Created } from './execute.js'
 
 type Db = Kysely<Schema>
-export interface ChatDeps { db: Db; llm: LlmClient; now: () => Date; timeoutMs?: number }
+export interface ChatDeps { db: Db; llm: LlmClient; now: () => Date; timeoutMs?: number; log?: (event: string, detail: Record<string, unknown>) => void }
 
 export class ChatError extends Error {
   constructor(readonly code: 'not_found' | 'conflict', message: string) {
@@ -22,6 +22,7 @@ const FAILED = 'จดไม่สำเร็จครับ ข้อมูล
 const EMPTY = 'ไม่แน่ใจว่าหมายถึงอะไรครับ ช่วยพิมพ์ใหม่อีกครั้งได้ไหม'
 const UNDOABLE = new Set(['transactions', 'events', 'tasks', 'habit_logs'])
 
+const errInfo = (e: unknown) => ({ name: e instanceof Error ? e.name : typeof e, message: e instanceof Error ? e.message.slice(0, 200) : '' }) // never the user's text or model payload
 const parseCreated = (json: string | null): Created[] => (json ? (JSON.parse(json) as Created[]) : [])
 const hasUndoable = (c: Created[]) => c.some((x) => UNDOABLE.has(x.table))
 
@@ -50,13 +51,17 @@ export async function handleMessage(deps: ChatDeps, text: string): Promise<{ rep
   let raw: unknown
   try {
     raw = await timeout(llm.interpret({ text, nowIso, recent }), deps.timeoutMs ?? 20_000)
-  } catch {
+  } catch (e) {
+    deps.log?.('llm_error', errInfo(e))
     return storeBot(db, APOLOGY)
   }
   const parsed = llmResultSchema.safeParse(raw) // never trust the model's shape
-  if (!parsed.success) return storeBot(db, UNSURE)
+  if (!parsed.success) {
+    deps.log?.('llm_schema_invalid', { issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), code: i.code })) })
+    return storeBot(db, UNSURE)
+  }
   const r = parsed.data
-  if (r.kind !== 'actions') return storeBot(db, (r.kind === 'ask' ? r.question : r.reply).trim() || EMPTY)
+  if (r.kind !== 'actions') return storeBot(db, (r.kind === 'ask' ? r.question : r.reply).trim().slice(0, 2000) || EMPTY)
 
   try {
     return await db.transaction().execute(async (trx) => {
@@ -64,13 +69,14 @@ export async function handleMessage(deps: ChatDeps, text: string): Promise<{ rep
       return storeBot(trx, lines.join('\n'), created) // bot message commits with the rows, so undo is always reachable
     })
   } catch (e) {
+    if (!(e instanceof AskError)) deps.log?.('action_error', errInfo(e))
     return storeBot(db, e instanceof AskError ? e.message : FAILED) // everything rolled back
   }
 }
 
 const gone = (e: unknown) => (e instanceof LedgerError || e instanceof PlannerError) && e.code === 'not_found'
 
-export async function undoMessage(deps: { db: Db }, botMessageId: number): Promise<void> {
+export async function undoMessage(deps: { db: Db; now?: () => Date }, botMessageId: number): Promise<void> {
   await deps.db.transaction().execute(async (trx) => {
     const m = await trx.selectFrom('chat_messages').select(['role', 'actions_json', 'undone_at']).where('id', '=', botMessageId).forUpdate().executeTakeFirst()
     const created = m?.role === 'bot' ? parseCreated(m.actions_json) : []
@@ -86,6 +92,6 @@ export async function undoMessage(deps: { db: Db }, botMessageId: number): Promi
         if (!gone(e)) throw e // already deleted by hand: fine
       }
     }
-    await trx.updateTable('chat_messages').set({ undone_at: new Date() }).where('id', '=', botMessageId).execute()
+    await trx.updateTable('chat_messages').set({ undone_at: (deps.now ?? (() => new Date()))() }).where('id', '=', botMessageId).execute()
   })
 }

@@ -262,3 +262,84 @@ describe('routes', () => {
     await app.close()
   })
 })
+
+describe('fix round 1: years, plausibility, logging, caps', () => {
+  const ev = (over: object): LlmResult => ({ kind: 'actions', actions: [{ type: 'add_event', title: 'x', kind: 'appointment', startsAt: '2026-11-27T15:00:00+07:00', ...over } as never] })
+  it('Buddhist-era query_month is normalised (no false zero)', async () => {
+    const food = (await db.selectFrom('categories').select('id').where('name', '=', 'อาหาร').executeTakeFirstOrThrow()).id
+    await addTransaction(db, { categoryId: food, kind: 'expense', amountSatang: 12345, occurredAt: new Date('2026-11-10T05:00:00Z') })
+    expect((await run({ kind: 'actions', actions: [{ type: 'query_month', month: '2569-11' }] })).reply).toBe('เดือนนี้ใช้ไป 123.45 บาท รับ 0 บาท')
+    expect((await run({ kind: 'actions', actions: [{ type: 'query_month', month: '2026-10' }] })).reply).toBe('เดือน 2026-10 ใช้ไป 0 บาท รับ 0 บาท')
+  })
+  it('2568-02-29 (CE 2025, no such day) is rejected, never rolled to March; 2567-02-29 is 2024-02-29', async () => {
+    const out = await run(ev({ kind: 'class', repeatWeekly: true, startsAt: '2568-02-29T10:00:00+07:00' }))
+    expect(out.reply).toMatch(/ยังไม่ได้จดอะไร/)
+    expect(await count('events')).toBe(0)
+    await run(ev({ kind: 'class', repeatWeekly: true, startsAt: '2567-02-29T10:00:00+07:00' }))
+    expect((await db.selectFrom('events').select('starts_at').executeTakeFirstOrThrow()).starts_at.toISOString()).toBe('2024-02-29T03:00:00.000Z')
+  })
+  it.each(['9999-01-01T10:00:00+07:00', '1900-01-01T10:00:00+07:00', '2400-01-01T10:00:00+07:00', '2025-01-01T10:00:00+07:00', '2026-11-25T10:00:00+07:00'])('implausible transaction date %s asks, writes nothing', async (occurredAt) => {
+    const out = await run(txn({ occurredAt }))
+    expect(out.reply).toMatch(/ดูไม่ถูกต้อง/)
+    expect(await count('transactions')).toBe(0)
+  })
+  it('shows the date when not today (Bangkok), not when today', async () => {
+    expect((await run(txn({ occurredAt: '2026-11-21T10:00:00+07:00' }))).reply).toBe('จดแล้ว: ข้าว 80 บาท (อาหาร) วันที่ เสาร์ 21 พ.ย.')
+    expect((await run(txn())).reply).toBe('จดแล้ว: ข้าว 80 บาท (อาหาร)')
+  })
+  it('event next year shows the year; years outside [y-1, y+5] ask; repeating class may be old', async () => {
+    expect((await run(ev({ startsAt: '2027-01-15T10:00:00+07:00' }))).reply).toBe('จดนัดแล้ว: x ศุกร์ 15 ม.ค. 2027 10:00')
+    expect((await run(ev({ startsAt: '2035-01-15T10:00:00+07:00' }))).reply).toMatch(/ดูไม่ถูกต้อง/)
+    expect((await run({ kind: 'actions', actions: [{ type: 'add_task', title: 't', priority: 1, dueAt: '2040-01-01T10:00:00+07:00' } as never] })).reply).toMatch(/ดูไม่ถูกต้อง/)
+    expect(await count('tasks')).toBe(0)
+    expect((await run(ev({ kind: 'class', repeatWeekly: true, startsAt: '2020-01-06T09:00:00+07:00' }))).reply).toMatch(/^จดคลาสแล้ว/)
+  })
+  it('21 actions are rejected with no writes; 20 are fine', async () => {
+    const one = (txn() as { actions: unknown[] }).actions[0]
+    expect((await run({ kind: 'actions', actions: Array(21).fill(one) as never })).reply).toMatch(/ยังไม่ได้จดอะไร/)
+    expect(await count('transactions')).toBe(0)
+    await run({ kind: 'actions', actions: Array(20).fill(one) as never })
+    expect(await count('transactions')).toBe(20)
+  })
+  it('a 30k-character reply is stored truncated', async () => {
+    const out = await run({ kind: 'chat', reply: 'ก'.repeat(30_000) })
+    expect(out.reply).toHaveLength(2000)
+    expect((await db.selectFrom('chat_messages').select('text').where('id', '=', out.messageId).executeTakeFirstOrThrow()).text).toHaveLength(2000)
+  })
+  it('a future habit day asks instead of the generic failure', async () => {
+    await addHabit(db, { name: 'Gym', freqType: 'daily', freqValue: '' })
+    const out = await run({ kind: 'actions', actions: [{ type: 'log_habit', name: 'Gym', day: '2026-12-25' }] })
+    expect(out.reply).toMatch(/ยังมาไม่ถึง/)
+    expect(await count('habit_logs')).toBe(0)
+  })
+  it('add_category echoes the DB name; undo stamps undone_at from deps.now', async () => {
+    expect((await run({ kind: 'actions', actions: [{ type: 'add_category', name: 'กาแฟ', kind: 'expense' }] })).reply).toBe('สร้างหมวดแล้ว: กาแฟ')
+    const out = await run(txn())
+    await undoMessage({ db, now }, out.messageId)
+    expect((await db.selectFrom('chat_messages').select('undone_at').where('id', '=', out.messageId).executeTakeFirstOrThrow()).undone_at!.toISOString()).toBe(NOW.toISOString())
+  })
+  describe('log hook (no user text, no payload)', () => {
+    const USER = 'ลับสุดยอด-ข้อความผู้ใช้'
+    const logs: { event: string; detail: Record<string, unknown> }[] = []
+    const go = (llm: FakeLlm, extra: object = {}, d = db) => handleMessage({ db: d, llm, now, log: (event, detail) => logs.push({ event, detail }), ...extra }, USER)
+    beforeEach(() => { logs.length = 0 })
+    const noLeak = () => expect(JSON.stringify(logs)).not.toContain(USER)
+    it('model throw, timeout, schema-invalid (issues path+code), DB error', async () => {
+      await go(new FakeLlm(() => { throw new Error('rate limited') }))
+      await go(new FakeLlm(() => new Promise(() => {})), { timeoutMs: 20 })
+      await go(new FakeLlm(() => txn({ amountSatang: 0, note: USER })))
+      const broken = new Proxy(db, { get: (t, k) => { const v = Reflect.get(t, k) as unknown; return k === 'transaction' ? () => { throw new Error('db down') } : typeof v === 'function' ? v.bind(t) : v } })
+      await go(new FakeLlm(() => txn()), {}, broken)
+      expect(logs.map((l) => l.event)).toEqual(['llm_error', 'llm_error', 'llm_schema_invalid', 'action_error'])
+      expect(logs[0]!.detail).toEqual({ name: 'Error', message: 'rate limited' })
+      expect(logs[1]!.detail.message).toBe('llm timeout')
+      expect(logs[2]!.detail).toEqual({ issues: [{ path: 'actions.0.amountSatang', code: 'too_small' }] })
+      expect(logs[3]!.detail).toEqual({ name: 'Error', message: 'db down' })
+      noLeak()
+    })
+    it('asks are not errors and are not logged', async () => {
+      await go(new FakeLlm(() => txn({ category: 'ลึกลับ' })))
+      expect(logs).toEqual([])
+    })
+  })
+})

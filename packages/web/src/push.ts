@@ -4,7 +4,7 @@ export function needsIosInstall(ua: string, standalone: boolean): boolean {
   return /iPhone|iPad|iPod/.test(ua) && !standalone
 }
 
-function keyBytes(b64url: string): Uint8Array<ArrayBuffer> {
+export function keyBytes(b64url: string): Uint8Array<ArrayBuffer> {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(b64url.length / 4) * 4, '=')
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 }

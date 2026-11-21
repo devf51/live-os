@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { api } from './api'
 
-export type Load<T> = { data: T | null; error: boolean; reload: () => void; setData: (d: T) => void }
+export type Load<T> = { data: T | null; error: boolean; reload: () => void; setData: Dispatch<SetStateAction<T | null>> }
 
 export function useLoad<T>(path: string): Load<T> {
   const [data, setData] = useState<T | null>(null)
@@ -29,7 +29,8 @@ export function Screen({ title, loads, children }: { title: string; loads: Pick<
           <p role="alert" className="error">ขออภัย โหลดข้อมูลไม่ได้ ลองใหม่อีกครั้งนะ</p>
           <button onClick={() => loads.forEach((l) => l.reload())}>ลองใหม่</button>
         </>
-      ) : ready ? children : <p role="status">กำลังโหลด…</p>}
+      ) : ready ? children : null}
+      <p role="status" aria-live="polite">{!failed && !ready ? 'กำลังโหลด…' : ''}</p>
     </main>
   )
 }

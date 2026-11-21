@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../api'
 import { useLoad, Screen } from '../useLoad'
 
@@ -7,9 +7,12 @@ type Habit = { id: number; name: string; done: boolean }
 export function Habits() {
   const l = useLoad<Habit[]>('/habits')
   const [err, setErr] = useState('')
-  const mark = (id: number, done: boolean) => l.setData(l.data!.map((h) => (h.id === id ? { ...h, done } : h)))
+  const pending = useRef(new Set<number>())
+  const mark = (id: number, done: boolean) => l.setData((prev) => prev && prev.map((h) => (h.id === id ? { ...h, done } : h)))
 
   async function tap(h: Habit) {
+    if (pending.current.has(h.id)) return
+    pending.current.add(h.id)
     setErr('')
     mark(h.id, true)
     try {
@@ -17,6 +20,8 @@ export function Habits() {
     } catch {
       mark(h.id, false)
       setErr(`ยังจดว่าทำ "${h.name}" ไม่ได้ ลองใหม่อีกครั้งนะ`)
+    } finally {
+      pending.current.delete(h.id)
     }
   }
 

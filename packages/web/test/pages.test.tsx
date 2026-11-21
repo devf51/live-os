@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Today } from '../src/pages/Today'
 import { Money } from '../src/pages/Money'
@@ -117,4 +117,54 @@ it('Money error retry', async () => {
   routes['/summary/month'] = () => json(200, summary)
   await userEvent.click(screen.getByRole('button', { name: 'ลองใหม่' }))
   expect(await screen.findByText('30000 บาท')).toBeTruthy()
+})
+
+const posts = () => fetchMock.mock.calls.filter(([u, i]) => /logs$/.test(u) && i?.method === 'POST')
+
+it('Habits double click sends exactly one POST', async () => {
+  routes['/habits'] = () => json(200, [{ id: 3, name: 'ดื่มน้ำ', done: false }])
+  routes['/habits/3/logs'] = () => new Promise<Response>(() => {})
+  render(<Habits />)
+  const btn = await screen.findByRole('button', { name: /ดื่มน้ำ/ })
+  fireEvent.click(btn)
+  fireEvent.click(btn)
+  expect(posts()).toHaveLength(1)
+})
+
+it('Habits A fails and B succeeds: only A reverts', async () => {
+  routes['/habits'] = () => json(200, [{ id: 3, name: 'ดื่มน้ำ', done: false }, { id: 4, name: 'เดิน', done: false }])
+  let failA!: () => void
+  routes['/habits/3/logs'] = () => new Promise<Response>((r) => { failA = () => r(json(500)) })
+  routes['/habits/4/logs'] = () => json(201, {})
+  render(<Habits />)
+  fireEvent.click(await screen.findByRole('button', { name: /ดื่มน้ำ/ }))
+  fireEvent.click(screen.getByRole('button', { name: /เดิน/ }))
+  expect(await screen.findByRole('button', { name: /เดิน.*ทำแล้ว/ })).toBeTruthy()
+  failA()
+  expect(await screen.findByRole('alert')).toBeTruthy()
+  expect(screen.getByRole('button', { name: /^ดื่มน้ำ$/ })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /เดิน.*ทำแล้ว/ })).toBeTruthy()
+})
+
+it('Habits retry after failure posts again', async () => {
+  routes['/habits'] = () => json(200, [{ id: 3, name: 'ดื่มน้ำ', done: false }])
+  routes['/habits/3/logs'] = () => json(500)
+  render(<Habits />)
+  await userEvent.click(await screen.findByRole('button', { name: /ดื่มน้ำ/ }))
+  await screen.findByRole('alert')
+  routes['/habits/3/logs'] = () => json(201, {})
+  await userEvent.click(screen.getByRole('button', { name: /ดื่มน้ำ/ }))
+  expect(await screen.findByRole('button', { name: /ดื่มน้ำ.*ทำแล้ว/ })).toBeTruthy()
+  expect(posts()).toHaveLength(2)
+})
+
+it('status live region is persistent', async () => {
+  routes['/today'] = () => json(200, [])
+  render(<Today />)
+  const region = screen.getByRole('status')
+  expect(region.getAttribute('aria-live')).toBe('polite')
+  expect(region.textContent).toContain('กำลังโหลด')
+  await screen.findByText('วันนี้ไม่มีอะไร')
+  await waitFor(() => expect(screen.getByRole('status')).toBe(region))
+  expect(region.textContent).toBe('')
 })

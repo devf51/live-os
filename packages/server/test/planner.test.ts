@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely'
 import { testDb } from './helpers/testDb.js'
 import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
+import { testPush } from './helpers/push.js'
 import { hashPassword } from '../src/auth/auth.js'
 import { addEvent, addTask, listToday, occurrencesBetween } from '../src/planner/planner.js'
 
@@ -77,7 +78,7 @@ describe('routes', () => {
   let app: ReturnType<typeof buildApp>
   let cookies: Record<string, string>
   beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', now: () => d('2026-11-25T03:00:00Z') })
+    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => d('2026-11-25T03:00:00Z') })
     const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
     cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
   })

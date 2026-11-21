@@ -54,6 +54,8 @@ export interface Schema {
     fire_at: Date
     sent_at: Nullable<Date>
     attempts: number
+    level: Nullable<number> // 80 | 100 for budget reminders
+    occurs_at: Nullable<Date> // event occurrence instant (UTC)
   }
   push_subscriptions: {
     id: Id

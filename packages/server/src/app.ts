@@ -4,6 +4,7 @@ import type { Kysely } from 'kysely'
 import type { Schema } from './db/schema.js'
 import { authRoutes } from './auth/routes.js'
 import { registerLedgerRoutes } from './ledger/routes.js'
+import { registerPlannerRoutes } from './planner/routes.js'
 
 export interface AppDeps {
   db: Kysely<Schema>
@@ -22,5 +23,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   // (later tasks: just `app.register(...)` here) is protected, 404s included.
   authRoutes(app, deps, deps.now ?? (() => new Date()), deps.secureCookie ?? process.env.NODE_ENV !== 'test')
   registerLedgerRoutes(app, deps)
+  registerPlannerRoutes(app, deps)
   return app
 }

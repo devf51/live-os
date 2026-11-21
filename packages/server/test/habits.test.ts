@@ -15,14 +15,15 @@ beforeEach(async () => {
 })
 // 2026-11-18 is a Wednesday; week = Mon 11-16 .. Sun 11-22
 const daily = (name = 'd') => addHabit(db, { name, freqType: 'daily', freqValue: '' })
-const logs = async (id: number, days: string[]) => { for (const d of days) await logHabit(db, id, d) }
+const TODAY = '2026-12-31' // far enough ahead that fixture days are never in the future
+const logs = async (id: number, days: string[]) => { for (const d of days) await logHabit(db, id, d, TODAY) }
 const due = async (day: string) => (await habitsDue(db, day)).map((h) => `${h.name}${h.done ? '*' : ''}`)
 
 describe('habitsDue', () => {
   it('daily shows every day, done flips with a log', async () => {
     const { id } = await daily()
     expect(await habitsDue(db, '2026-11-18')).toEqual([{ id, name: 'd', done: false }])
-    await logHabit(db, id, '2026-11-18')
+    await logHabit(db, id, '2026-11-18', TODAY)
     expect(await habitsDue(db, '2026-11-18')).toEqual([{ id, name: 'd', done: true }])
     expect(await due('2026-11-19')).toEqual(['d'])
   })
@@ -41,7 +42,7 @@ describe('habitsDue', () => {
     const { id } = await addHabit(db, { name: 'p', freqType: 'per_week', freqValue: '3' })
     await logs(id, ['2026-11-16', '2026-11-17'])
     expect(await due('2026-11-18')).toEqual(['p'])
-    await logHabit(db, id, '2026-11-18')
+    await logHabit(db, id, '2026-11-18', TODAY)
     expect(await due('2026-11-18')).toEqual(['p*'])
     expect(await due('2026-11-19')).toEqual([])
     expect(await due('2026-11-22')).toEqual([])
@@ -57,16 +58,28 @@ describe('habitsDue', () => {
 describe('logHabit', () => {
   it('is idempotent', async () => {
     const { id } = await daily()
-    await logHabit(db, id, '2026-11-18')
-    await logHabit(db, id, '2026-11-18')
+    await logHabit(db, id, '2026-11-18', TODAY)
+    await logHabit(db, id, '2026-11-18', TODAY)
     expect(await db.selectFrom('habit_logs').selectAll().execute()).toHaveLength(1)
   })
   it('rejects unknown / deleted habit and invalid days', async () => {
-    await expect(logHabit(db, 999, '2026-11-18')).rejects.toMatchObject({ code: 'not_found' })
+    await expect(logHabit(db, 999, '2026-11-18', TODAY)).rejects.toMatchObject({ code: 'not_found' })
     const { id } = await daily()
-    await expect(logHabit(db, id, '2026-02-30')).rejects.toMatchObject({ code: 'invalid' })
+    await expect(logHabit(db, id, '2026-02-30', TODAY)).rejects.toMatchObject({ code: 'invalid' })
     await db.updateTable('habits').set({ deleted_at: new Date() }).where('id', '=', id).execute()
-    await expect(logHabit(db, id, '2026-11-18')).rejects.toMatchObject({ code: 'not_found' })
+    await expect(logHabit(db, id, '2026-11-18', TODAY)).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+describe('logHabit future guard', () => {
+  it('today and past ok; future rejected without a row; invalid today rejected; double log fine', async () => {
+    const { id } = await daily()
+    await logHabit(db, id, '2026-11-18', '2026-11-18')
+    await logHabit(db, id, '2026-11-18', '2026-11-18')
+    await logHabit(db, id, '2026-11-10', '2026-11-18')
+    await expect(logHabit(db, id, '2026-11-19', '2026-11-18')).rejects.toMatchObject({ code: 'invalid' })
+    await expect(logHabit(db, id, '2026-11-18', 'nope')).rejects.toMatchObject({ code: 'invalid' })
+    expect(await db.selectFrom('habit_logs').selectAll().execute()).toHaveLength(2)
   })
 })
 
@@ -106,7 +119,7 @@ describe('currentStreak', () => {
     const { id } = await addHabit(db, { name: 'p', freqType: 'per_week', freqValue: '2' })
     await logs(id, ['2026-11-02', '2026-11-04', '2026-11-09', '2026-11-10', '2026-11-16'])
     expect(await currentStreak(db, id, '2026-11-18')).toBe(2) // current week 1/2, previous two met
-    await logHabit(db, id, '2026-11-17')
+    await logHabit(db, id, '2026-11-17', TODAY)
     expect(await currentStreak(db, id, '2026-11-18')).toBe(3)
     expect(await currentStreak(db, id, '2026-11-30')).toBe(0) // current and previous week empty
   })
@@ -115,7 +128,7 @@ describe('currentStreak', () => {
     // Sun 23:30 Bangkok (16:30Z) and Mon 00:10 Bangkok (Sun 17:10Z) are different weeks
     await logs(id, ['2026-11-22', '2026-11-23'])
     expect(await currentStreak(db, id, '2026-11-23')).toBe(0)
-    await logHabit(db, id, '2026-11-21')
+    await logHabit(db, id, '2026-11-21', TODAY)
     expect(await currentStreak(db, id, '2026-11-23')).toBe(1)
   })
   it('0 for deleted/unknown habit logs', async () => {

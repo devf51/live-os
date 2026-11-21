@@ -36,8 +36,7 @@ export function registerHabitRoutes(app: FastifyInstance, deps: AppDeps) {
     r.post('/habits/:id/logs', async (req, reply) => {
       const habitId = pid(req)
       const day = logBody.parse(req.body ?? {}).day ?? today()
-      if (day > today()) throw new HabitError('invalid', 'day is in the future')
-      await logHabit(db, habitId, day)
+      await logHabit(db, habitId, day, today())
       return reply.code(200).send({ ok: true })
     })
   })

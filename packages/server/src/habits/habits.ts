@@ -56,8 +56,10 @@ export async function deleteHabit(db: Db, id: number): Promise<void> {
   await db.updateTable('habits').set({ deleted_at: new Date() }).where('id', '=', id).execute()
 }
 
-export async function logHabit(db: Db, habitId: number, day: string): Promise<void> {
-  if (!isValidDay(day)) throw new HabitError('invalid', 'day must be a valid YYYY-MM-DD')
+/** `today` = current Bangkok day; the single source of truth for rejecting future days. */
+export async function logHabit(db: Db, habitId: number, day: string, today: string): Promise<void> {
+  if (!isValidDay(day) || !isValidDay(today)) throw new HabitError('invalid', 'day must be a valid YYYY-MM-DD')
+  if (day > today) throw new HabitError('invalid', 'day is in the future')
   await requireHabit(db, habitId)
   await db.insertInto('habit_logs').ignore().values({ habit_id: habitId, day }).execute() // UNIQUE(habit_id, day) => idempotent
 }

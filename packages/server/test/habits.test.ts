@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely'
 import { testDb } from './helpers/testDb.js'
 import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
+import { testPush } from './helpers/push.js'
 import { hashPassword } from '../src/auth/auth.js'
 import { addHabit, currentStreak, habitsDue, logHabit } from '../src/habits/habits.js'
 
@@ -141,7 +142,7 @@ describe('habit routes', () => {
   let cookies: Record<string, string>
   // Sun 2026-11-22 23:30 Bangkok: UTC date is still the 22nd; Bangkok day is 2026-11-22. Use Wed 10:00 instead for simplicity.
   beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', now: () => new Date('2026-11-18T03:00:00Z') })
+    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => new Date('2026-11-18T03:00:00Z') })
     const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
     cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
   })
@@ -197,7 +198,7 @@ describe('habit routes', () => {
   it('"today" is the Bangkok day: Sun 23:30 -> Sun, Mon 00:10 -> Mon (server zone +07:00)', async () => {
     const { id } = (await call('POST', '/habits', { name: 'a', freqType: 'daily', freqValue: '' })).json()
     for (const now of ['2026-11-22T16:30:00Z', '2026-11-22T17:10:00Z']) {
-      const a = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', now: () => new Date(now) })
+      const a = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => new Date(now) })
       const login = await a.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
       const c = { [login.cookies[0]!.name]: login.cookies[0]!.value }
       expect((await a.inject({ method: 'POST', url: `/habits/${id}/logs`, cookies: c })).statusCode).toBe(200)

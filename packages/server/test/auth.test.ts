@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { Kysely } from 'kysely'
 import { hashPassword, signSession, verifyPassword, verifySession } from '../src/auth/auth.js'
 import { buildApp } from '../src/app.js'
+import { testPush } from './helpers/push.js'
 import type { Schema } from '../src/db/schema.js'
 
 const PW = 'throwaway-pw'
@@ -9,7 +10,7 @@ const SECRET = 'test-secret-test-secret'
 const DAY = 86_400_000
 let hash: string
 const mk = () =>
-  buildApp({ db: {} as unknown as Kysely<Schema>, ownerPasswordHash: hash, sessionSecret: SECRET })
+  buildApp({ db: {} as unknown as Kysely<Schema>, ownerPasswordHash: hash, sessionSecret: SECRET, ...testPush })
 const login = (app: ReturnType<typeof mk>, password: string) =>
   app.inject({ method: 'POST', url: '/auth/login', payload: { password } })
 

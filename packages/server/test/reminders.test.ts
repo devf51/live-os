@@ -4,6 +4,7 @@ import { testDb } from './helpers/testDb.js'
 import { migrate } from '../src/db/client.js'
 import type { Schema } from '../src/db/schema.js'
 import { buildApp } from '../src/app.js'
+import { testPush } from './helpers/push.js'
 import { hashPassword } from '../src/auth/auth.js'
 import { addEvent, deleteEvent } from '../src/planner/planner.js'
 import { addCategory, addTransaction, setBudget } from '../src/ledger/ledger.js'
@@ -260,7 +261,7 @@ describe('routes', () => {
   let app: ReturnType<typeof buildApp>
   let cookies: Record<string, string>
   beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret' })
+    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush })
     const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
     cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
   })

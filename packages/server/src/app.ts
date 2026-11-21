@@ -7,13 +7,16 @@ import { registerLedgerRoutes } from './ledger/routes.js'
 import { registerPlannerRoutes } from './planner/routes.js'
 import { registerHabitRoutes } from './habits/routes.js'
 import { registerReminderRoutes } from './reminders/routes.js'
+import { registerPushRoutes } from './push/routes.js'
+import type { PushSender } from './push/push.js'
 
 export interface AppDeps {
   db: Kysely<Schema>
   ownerPasswordHash: string
   sessionSecret: string
   llm?: unknown // placeholder; narrowed by a later task
-  sender?: unknown // placeholder; narrowed by a later task
+  sender: PushSender
+  vapidPublicKey: string
   now?: () => Date
   secureCookie?: boolean // default: true unless NODE_ENV=test
 }
@@ -28,5 +31,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerPlannerRoutes(app, deps)
   registerHabitRoutes(app, deps)
   registerReminderRoutes(app, deps)
+  registerPushRoutes(app, deps)
   return app
 }

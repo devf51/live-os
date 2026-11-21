@@ -1,4 +1,4 @@
-import type { Kysely } from 'kysely'
+import { sql, type Kysely } from 'kysely'
 import type { Schema } from '../db/schema.js'
 
 type Db = Kysely<Schema>
@@ -62,6 +62,18 @@ export async function logHabit(db: Db, habitId: number, day: string, today: stri
   if (day > today) throw new HabitError('invalid', 'day is in the future')
   await requireHabit(db, habitId)
   await db.insertInto('habit_logs').ignore().values({ habit_id: habitId, day }).execute() // UNIQUE(habit_id, day) => idempotent
+}
+
+/** Trimmed, case-insensitive; several matches -> lowest id. */
+export async function findHabitByName(db: Db, name: string): Promise<{ id: number; name: string } | null> {
+  const r = await db.selectFrom('habits').select(['id', 'name']).where(sql`lower(trim(name))`, '=', name.trim().toLowerCase())
+    .where('deleted_at', 'is', null).orderBy('id').limit(1).executeTakeFirst()
+  return r ? { id: Number(r.id), name: r.name } : null
+}
+
+/** The only hard delete: a log row has no state beyond (habit, day), so undo just removes it. */
+export async function unlogHabit(db: Db, habitId: number, day: string): Promise<void> {
+  await db.deleteFrom('habit_logs').where('habit_id', '=', habitId).where('day', '=', day).execute()
 }
 
 export async function habitsDue(db: Db, day: string): Promise<{ id: number; name: string; done: boolean }[]> {

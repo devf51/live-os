@@ -8,13 +8,15 @@ import { registerPlannerRoutes } from './planner/routes.js'
 import { registerHabitRoutes } from './habits/routes.js'
 import { registerReminderRoutes } from './reminders/routes.js'
 import { registerPushRoutes } from './push/routes.js'
+import { registerChatRoutes } from './chat/routes.js'
+import type { LlmClient } from './llm/llm.js'
 import type { PushSender } from './push/push.js'
 
 export interface AppDeps {
   db: Kysely<Schema>
   ownerPasswordHash: string
   sessionSecret: string
-  llm?: unknown // placeholder; narrowed by a later task
+  llm?: LlmClient
   sender: PushSender
   vapidPublicKey: string
   now?: () => Date
@@ -32,5 +34,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerHabitRoutes(app, deps)
   registerReminderRoutes(app, deps)
   registerPushRoutes(app, deps)
+  registerChatRoutes(app, deps)
   return app
 }

@@ -2,11 +2,18 @@ import { Kysely, MysqlDialect } from 'kysely'
 import { createPool } from 'mysql2'
 import type { Schema } from './schema.js'
 import * as m001 from './migrations/001_init.js'
+import * as m002 from './migrations/002_reminder_fields.js'
+import * as m003 from './migrations/003_thai_collation.js'
 
-const migrations = [{ version: '001_init', up: m001.up }]
+const migrations = [
+  { version: '001_init', up: m001.up },
+  { version: '002_reminder_fields', up: m002.up },
+  { version: '003_thai_collation', up: m003.up },
+]
 
 export function createDb(url: string): Kysely<Schema> {
-  const pool = createPool({ uri: url, timezone: 'Z' })
+  // dateStrings DATE: habit_logs.day stays 'YYYY-MM-DD'; DATETIME still becomes a (UTC) Date
+  const pool = createPool({ uri: url, timezone: 'Z', dateStrings: ['DATE'] })
   // every pooled connection stores/defaults times in UTC (CURRENT_TIMESTAMP follows the session zone)
   pool.on('connection', (c) => c.query("SET time_zone = '+00:00'"))
   // cast: mysql2 3.24 Pool typings don't match kysely's MysqlPool, runtime is fine

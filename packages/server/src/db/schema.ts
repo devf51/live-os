@@ -45,7 +45,7 @@ export interface Schema {
     freq_value: string
     deleted_at: Nullable<Date>
   }
-  habit_logs: { id: Id; habit_id: number; day: string | Date }
+  habit_logs: { id: Id; habit_id: number; day: string } // DATE via dateStrings
   reminders: {
     id: Id
     kind: 'event' | 'task' | 'budget'
@@ -54,6 +54,8 @@ export interface Schema {
     fire_at: Date
     sent_at: Nullable<Date>
     attempts: number
+    level: Nullable<number> // 80 | 100 for budget reminders
+    occurs_at: Nullable<Date> // event occurrence instant (UTC)
   }
   push_subscriptions: {
     id: Id

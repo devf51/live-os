@@ -9,5 +9,7 @@ describe("money", () => {
   it("formatBaht", () => {
     expect(formatBaht(8000)).toBe("80 บาท");
     expect(formatBaht(8050)).toBe("80.50 บาท");
+    expect(formatBaht(123456700)).toBe("1,234,567 บาท");
+    expect(formatBaht(123456750)).toBe("1,234,567.50 บาท");
   });
 });

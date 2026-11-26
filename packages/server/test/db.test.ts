@@ -51,4 +51,23 @@ describe('schema', () => {
     const r = await db.selectFrom('chat_messages').select('created_at').where('id', '=', Number(insertId)).executeTakeFirstOrThrow()
     expect(Math.abs(r.created_at.getTime() - Date.now())).toBeLessThan(5000)
   })
+
+  it('declares exactly the six named foreign keys (MySQL ignores inline REFERENCES)', async () => {
+    const { rows } = await sql<{ n: string }>`select constraint_name as n from information_schema.referential_constraints where constraint_schema = database()`.execute(db)
+    expect(rows.map((r) => r.n).sort()).toEqual([
+      'fk_budgets_category', 'fk_events_source_message', 'fk_habit_logs_habit',
+      'fk_tasks_source_message', 'fk_transactions_category', 'fk_transactions_source_message',
+    ])
+  })
+
+  it('DATE columns read back as strings, DATETIME still as UTC Date', async () => {
+    await db.deleteFrom('habit_logs').execute()
+    await db.deleteFrom('habits').execute()
+    const { insertId } = await db.insertInto('habits').values({ name: 'x', freq_type: 'daily', freq_value: '', deleted_at: new Date('2026-11-20T17:30:00Z') }).executeTakeFirstOrThrow()
+    await db.insertInto('habit_logs').values({ habit_id: Number(insertId), day: '2026-11-20' }).execute()
+    const log = await db.selectFrom('habit_logs').select('day').executeTakeFirstOrThrow()
+    expect(log.day).toBe('2026-11-20')
+    const h = await db.selectFrom('habits').select('deleted_at').executeTakeFirstOrThrow()
+    expect(h.deleted_at).toEqual(new Date('2026-11-20T17:30:00Z'))
+  })
 })

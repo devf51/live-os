@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useLoad, Screen } from '../useLoad'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import { SendHorizontal } from 'lucide-react'
 
 type Msg = { id: number; role: 'user' | 'bot'; text: string; createdAt: string; undoable: boolean; cancelled?: boolean; pending?: boolean }
 
@@ -87,43 +91,43 @@ export function Chat() {
   }
 
   return (
-    <Screen title="แชท" loads={[l]}>
+    <Screen loads={[l]}>
       {msgs && (
         <>
-          <ul className="chat-log plain" role="log" aria-live="polite" aria-label="บทสนทนา">
+          <ul className="flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto py-3" role="log" aria-live="polite" aria-label="บทสนทนา">
             {msgs.length === 0 && (
-              <li className="muted">
+              <li className="text-muted-foreground">
                 <p>เล่าให้ฟังได้เลย เดี๋ยวช่วยจดให้ เช่น</p>
-                <ul>{EXAMPLES.map((x) => <li key={x}>{x}</li>)}</ul>
+                <ul className="ml-5 list-disc">{EXAMPLES.map((x) => <li key={x}>{x}</li>)}</ul>
               </li>
             )}
             {msgs.map((m) => (
-              <li key={m.id} className={`msg ${m.role}`}>
-                <p className={m.cancelled ? 'bubble cancelled' : 'bubble'}>
+              <li key={m.id} className={cn('flex max-w-[85%] flex-col gap-1', m.role === 'user' ? 'items-end self-end' : 'items-start')}>
+                <p className={cn('m-0 whitespace-pre-wrap break-words rounded-2xl border px-3.5 py-2', m.role === 'user' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card', m.cancelled && 'text-muted-foreground line-through')}>
                   <span className="sr-only">{m.role === 'user' ? 'คุณ' : 'ผู้ช่วย'}: </span>
                   {m.text}
                 </p>
-                {m.cancelled && <small>ยกเลิกแล้ว</small>}
+                {m.cancelled && <small className="text-xs text-muted-foreground">ยกเลิกแล้ว</small>}
                 {m.undoable && !m.cancelled && (
-                  <div className="acts">
-                    <button disabled={busy === m.id} onClick={() => undo(m, false)}>ยกเลิก</button>
-                    <button disabled={busy === m.id} onClick={() => undo(m, true)}>แก้</button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => undo(m, false)}>ยกเลิก</Button>
+                    <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => undo(m, true)}>แก้</Button>
                   </div>
                 )}
-                {!m.pending && <small>{fmtTime(m.createdAt)}</small>}
+                {!m.pending && <small className="text-xs text-muted-foreground">{fmtTime(m.createdAt)}</small>}
               </li>
             ))}
             <li ref={end} aria-hidden="true" />
           </ul>
-          {err && <p role="alert" className="error">{err}</p>}
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); send() }}>
+          {err && <p role="alert" className="text-destructive">{err}</p>}
+          <form className="flex items-end gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" onSubmit={(e) => { e.preventDefault(); send() }}>
             <label className="sr-only" htmlFor="chat-input">พิมพ์เล่าให้ฟังได้เลย…</label>
-            <textarea
+            <Textarea
               id="chat-input" ref={box} rows={1} maxLength={2000} placeholder="พิมพ์เล่าให้ฟังได้เลย…" value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); send() } }}
             />
-            <button type="submit" disabled={sending}>ส่ง</button>
+            <Button type="submit" size="icon" disabled={sending} aria-label="ส่ง"><SendHorizontal /></Button>
           </form>
         </>
       )}

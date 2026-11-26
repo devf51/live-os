@@ -48,11 +48,13 @@ async function requireMatching(db: Db, categoryId: number, kind: Kind) {
 }
 
 export async function findCategory(db: Db, name: string): Promise<{ id: number } | null> {
-  const r = await db.selectFrom('categories').select('id').where('name', '=', name).executeTakeFirst()
+  const r = await db.selectFrom('categories').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst() // name is utf8mb4_bin: tone-sensitive, so case is folded here
   return r ? { id: Number(r.id) } : null
 }
 
 export async function addCategory(db: Db, name: string, kind: Kind): Promise<{ id: number }> {
+  const existing = await findCategory(db, name) // case-insensitive; the bin UNIQUE only catches exact repeats
+  if (existing) return existing
   await db.insertInto('categories').ignore().values({ name, kind }).execute() // UNIQUE(name) makes this race-safe
   return (await findCategory(db, name))!
 }

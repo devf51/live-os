@@ -1,46 +1,50 @@
 import { useEffect, useState } from 'react'
-import { api, UNAUTHORIZED_EVENT } from './api'
+import { Settings as SettingsIcon } from 'lucide-react'
+import { api, ApiError, UNAUTHORIZED_EVENT } from './api'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
-import { Today } from './pages/Today'
-import { Money } from './pages/Money'
-import { Habits } from './pages/Habits'
 import { Chat } from './pages/Chat'
-
-const TABS = [
-  { id: 'chat', label: 'แชท', icon: '💬', Page: Chat },
-  { id: 'today', label: 'วันนี้', icon: '🌤️', Page: Today },
-  { id: 'money', label: 'เงิน', icon: '💰', Page: Money },
-  { id: 'habits', label: 'นิสัย', icon: '🌱', Page: Habits },
-  { id: 'settings', label: 'ตั้งค่า', icon: '⚙️', Page: null },
-] as const
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
 export function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
-  const [tab, setTab] = useState<string>('chat')
+  const [offline, setOffline] = useState(false)
+  const [n, setN] = useState(0)
 
   useEffect(() => {
     const out = () => setAuthed(false)
     window.addEventListener(UNAUTHORIZED_EVENT, out)
-    api('/auth/me').then(() => setAuthed(true), () => {})
+    setOffline(false)
+    // 401 flips to login via the event; any other failure (offline, server down) must not hang on "loading"
+    api('/auth/me').then(() => setAuthed(true), (e) => { if (!(e instanceof ApiError && e.status === 401)) setOffline(true) })
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, out)
-  }, [])
+  }, [n])
 
-  if (authed === null) return <p className="page" role="status">กำลังโหลด…</p>
-  if (!authed) return <Login onDone={() => { setTab('chat'); setAuthed(true) }} />
+  if (offline) return (
+    <div className="grid justify-items-start gap-3 p-6">
+      <p role="alert" className="text-destructive">เชื่อมต่อไม่ได้ ลองใหม่อีกครั้งนะ</p>
+      <Button onClick={() => setN((x) => x + 1)}>ลองใหม่</Button>
+    </div>
+  )
+  if (authed === null) return <p className="p-6" role="status">กำลังโหลด…</p>
+  if (!authed) return <Login onDone={() => setAuthed(true)} />
 
-  const cur = TABS.find((t) => t.id === tab)!
   return (
-    <>
-      {cur.Page ? <cur.Page /> : <Settings onLogout={() => setAuthed(false)} />}
-      <nav aria-label="เมนูหลัก">
-        {TABS.map((t) => (
-          <button key={t.id} aria-current={t.id === tab ? 'page' : undefined} onClick={() => setTab(t.id)}>
-            <span aria-hidden="true">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
-      </nav>
-    </>
+    <div className="mx-auto flex h-dvh max-w-lg flex-col">
+      <header className="flex items-center justify-between px-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <h1 className="text-lg font-semibold">แชท</h1>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="ตั้งค่า"><SettingsIcon /></Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogTitle className="text-lg font-semibold">ตั้งค่า</DialogTitle>
+            <Settings onLogout={() => setAuthed(false)} />
+          </DialogContent>
+        </Dialog>
+      </header>
+      <Chat />
+    </div>
   )
 }

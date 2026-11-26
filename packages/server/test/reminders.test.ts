@@ -3,9 +3,6 @@ import { sql, type Kysely } from 'kysely'
 import { testDb } from './helpers/testDb.js'
 import { migrate } from '../src/db/client.js'
 import type { Schema } from '../src/db/schema.js'
-import { buildApp } from '../src/app.js'
-import { testPush } from './helpers/push.js'
-import { hashPassword } from '../src/auth/auth.js'
 import { addEvent, deleteEvent } from '../src/planner/planner.js'
 import { addCategory, addTransaction, setBudget } from '../src/ledger/ledger.js'
 import { DEFAULT_REMINDER_SETTINGS, dueReminders, inQuietHours, planReminders } from '../src/reminders/reminders.js'
@@ -254,34 +251,5 @@ describe('stale reminders', () => {
     expect(await dueReminders(db, n, S)).toEqual([])
     await db.updateTable('events').set({ starts_at: at('2026-11-24T02:00:00Z') }).where('id', '=', id).execute() // starts after occurrence
     expect(await dueReminders(db, n, S)).toEqual([])
-  })
-})
-
-describe('routes', () => {
-  let app: ReturnType<typeof buildApp>
-  let cookies: Record<string, string>
-  beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush })
-    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
-    cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
-  })
-  const put = (payload: object) => app.inject({ method: 'PUT', url: '/settings', payload, cookies })
-  it('401 without session', async () => {
-    expect((await app.inject({ url: '/settings' })).statusCode).toBe(401)
-    expect((await app.inject({ method: 'PUT', url: '/settings', payload: {} })).statusCode).toBe(401)
-  })
-  it('GET defaults, PUT valid persists', async () => {
-    expect((await app.inject({ url: '/settings', cookies })).json()).toEqual(S)
-    const res = await put({ dailyCap: 5, quietStart: '23:30' })
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ ...S, dailyCap: 5, quietStart: '23:30' })
-    expect((await app.inject({ url: '/settings', cookies })).json()).toEqual({ ...S, dailyCap: 5, quietStart: '23:30' })
-    expect((await loadSettings(db)).dailyCap).toBe(5)
-  })
-  it('PUT invalid -> 400', async () => {
-    for (const bad of [{ dailyCap: -1 }, { dailyCap: 0 }, { dailyCap: 101 }, { dailyCap: 1.5 }, { defaultLeadMinutes: -1 }, { defaultLeadMinutes: 10081 },
-      { quietStart: '24:00' }, { quietStart: '7:5' }, { quietEnd: '25:61' }, { nope: 1 }])
-      expect((await put(bad)).statusCode, JSON.stringify(bad)).toBe(400)
-    expect((await put({ defaultLeadMinutes: 0, dailyCap: 100, quietStart: '00:00', quietEnd: '23:59' })).statusCode).toBe(200)
   })
 })

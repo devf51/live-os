@@ -31,14 +31,14 @@ it('needsIosInstall', () => {
   expect(needsIosInstall(IPHONE, true)).toBe(false)
 })
 
-it('401 shows login, then login shows the five-page nav', async () => {
+it('401 shows login, then login shows chat with only a settings button', async () => {
   render(<App />)
   const pw = await screen.findByLabelText('รหัสผ่าน')
   await userEvent.type(pw, 'secret')
   await userEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
-  const nav = await screen.findByRole('navigation')
-  for (const n of ['แชท', 'วันนี้', 'เงิน', 'นิสัย', 'ตั้งค่า']) expect(nav.textContent).toContain(n)
-  expect(nav.querySelectorAll('button')).toHaveLength(5)
+  expect(await screen.findByRole('log', { name: 'บทสนทนา' })).toBeTruthy()
+  expect(screen.queryByRole('navigation')).toBeNull()
+  expect(screen.getByRole('button', { name: 'ตั้งค่า' })).toBeTruthy()
 })
 
 it('settings button calls enablePush', async () => {
@@ -46,4 +46,11 @@ it('settings button calls enablePush', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'เปิดการแจ้งเตือน' }))
   await waitFor(() => expect(push.enablePush).toHaveBeenCalled())
   expect(await screen.findByText('เปิดการแจ้งเตือนแล้ว')).toBeTruthy()
+})
+
+it('non-401 failure of /auth/me shows retry, not endless loading', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+  render(<App />)
+  expect((await screen.findByRole('alert')).textContent).toContain('เชื่อมต่อไม่ได้')
+  expect(screen.getByRole('button', { name: 'ลองใหม่' })).toBeTruthy()
 })

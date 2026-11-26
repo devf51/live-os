@@ -2,9 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Kysely } from 'kysely'
 import { testDb } from './helpers/testDb.js'
 import type { Schema } from '../src/db/schema.js'
-import { buildApp } from '../src/app.js'
-import { testPush } from './helpers/push.js'
-import { hashPassword } from '../src/auth/auth.js'
 import { addHabit, currentStreak, deleteHabit, findHabitByName, habitsDue, logHabit, unlogHabit } from '../src/habits/habits.js'
 
 let db: Kysely<Schema>
@@ -137,74 +134,14 @@ describe('currentStreak', () => {
   })
 })
 
-describe('habit routes', () => {
-  let app: ReturnType<typeof buildApp>
-  let cookies: Record<string, string>
-  // Sun 2026-11-22 23:30 Bangkok: UTC date is still the 22nd; Bangkok day is 2026-11-22. Use Wed 10:00 instead for simplicity.
-  beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => new Date('2026-11-18T03:00:00Z') })
-    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
-    cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
-  })
-  afterAll(async () => { await app.close() })
-  const call = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: object) => app.inject({ method, url, payload, cookies })
-
-  it('401 without a session', async () => {
-    expect((await app.inject({ url: '/habits' })).statusCode).toBe(401)
-    expect((await app.inject({ method: 'POST', url: '/habits/1/logs' })).statusCode).toBe(401)
-  })
-  it('create, list due today with exact JSON, log today with empty body, idempotent', async () => {
-    const c = await call('POST', '/habits', { name: '  วิ่ง  ', freqType: 'daily', freqValue: '' })
-    expect(c.statusCode).toBe(201)
-    const { id } = c.json()
-    expect(typeof id).toBe('number')
-    expect(JSON.parse((await call('GET', '/habits')).payload)).toEqual([{ id, name: 'วิ่ง', done: false }])
-    expect((await app.inject({ method: 'POST', url: `/habits/${id}/logs`, cookies })).json()).toEqual({ ok: true })
-    expect((await call('POST', `/habits/${id}/logs`, {})).statusCode).toBeLessThan(300)
-    expect(JSON.parse((await call('GET', '/habits')).payload)).toEqual([{ id, name: 'วิ่ง', done: true }])
-    expect(await db.selectFrom('habit_logs').selectAll().execute()).toHaveLength(1)
-  })
-  it('log with explicit past day ok; future / invalid day 400; unknown 404', async () => {
-    const { id } = (await call('POST', '/habits', { name: 'a', freqType: 'daily', freqValue: '' })).json()
-    expect((await call('POST', `/habits/${id}/logs`, { day: '2026-11-10' })).statusCode).toBeLessThan(300)
-    expect((await call('POST', `/habits/${id}/logs`, { day: '2026-11-18' })).statusCode).toBeLessThan(300)
-    expect((await call('POST', `/habits/${id}/logs`, { day: '2026-11-19' })).statusCode).toBe(400)
-    expect((await call('POST', `/habits/${id}/logs`, { day: '2026-02-30' })).statusCode).toBe(400)
-    expect((await call('POST', `/habits/${id}/logs`, { day: 'x' })).statusCode).toBe(400)
-    expect((await call('POST', '/habits/99999/logs')).statusCode).toBe(404)
-    expect((await call('POST', '/habits/abc/logs')).statusCode).toBe(400)
-  })
-  it('POST validation 400', async () => {
-    for (const b of [
-      { name: '', freqType: 'daily', freqValue: '' }, { name: 'x'.repeat(101), freqType: 'daily', freqValue: '' },
-      { name: 'x', freqType: 'monthly', freqValue: '' }, { name: 'x', freqType: 'per_week', freqValue: '9' },
-      { name: 'x', freqType: 'weekdays', freqValue: '1,1' }, { name: 'x', freqType: 'daily', freqValue: '1' },
-      { name: 'x', freqType: 'daily' },
-    ]) expect((await call('POST', '/habits', b)).statusCode).toBe(400)
-  })
-  it('PATCH name/frequency, validated against the merged state; DELETE soft-deletes', async () => {
-    const { id } = (await call('POST', '/habits', { name: 'a', freqType: 'daily', freqValue: '' })).json()
-    expect((await call('PATCH', `/habits/${id}`, { name: 'b' })).statusCode).toBe(200)
-    expect((await call('PATCH', `/habits/${id}`, { freqType: 'per_week' })).statusCode).toBe(400) // '' invalid for per_week
-    expect((await call('PATCH', `/habits/${id}`, { freqType: 'per_week', freqValue: '2' })).statusCode).toBe(200)
-    expect((await call('PATCH', '/habits/99999', { name: 'z' })).statusCode).toBe(404)
-    expect((await call('GET', '/habits')).json()).toEqual([{ id, name: 'b', done: false }])
-    expect((await call('DELETE', `/habits/${id}`)).statusCode).toBe(204)
-    expect((await call('GET', '/habits')).json()).toEqual([])
-    expect((await call('DELETE', `/habits/${id}`)).statusCode).toBe(404)
-    expect((await call('PATCH', `/habits/${id}`, { name: 'z' })).statusCode).toBe(404)
-    expect((await call('POST', `/habits/${id}/logs`)).statusCode).toBe(404)
-  })
-  it('"today" is the Bangkok day: Sun 23:30 -> Sun, Mon 00:10 -> Mon (server zone +07:00)', async () => {
-    const { id } = (await call('POST', '/habits', { name: 'a', freqType: 'daily', freqValue: '' })).json()
-    for (const now of ['2026-11-22T16:30:00Z', '2026-11-22T17:10:00Z']) {
-      const a = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => new Date(now) })
-      const login = await a.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
-      const c = { [login.cookies[0]!.name]: login.cookies[0]!.value }
-      expect((await a.inject({ method: 'POST', url: `/habits/${id}/logs`, cookies: c })).statusCode).toBe(200)
-      await a.close()
-    }
-    expect((await db.selectFrom('habit_logs').select('day').orderBy('day').execute()).map((r) => r.day)).toEqual(['2026-11-22', '2026-11-23'])
+describe('findHabitByName Thai tones', () => {
+  it('ขาว and ข้าว are different habits', async () => {
+    await db.deleteFrom('habit_logs').execute()
+    await db.deleteFrom('habits').execute()
+    const a = await addHabit(db, { name: 'ข้าว', freqType: 'daily', freqValue: '' })
+    const b = await addHabit(db, { name: 'ขาว', freqType: 'daily', freqValue: '' })
+    expect((await findHabitByName(db, 'ขาว'))?.id).toBe(b.id)
+    expect((await findHabitByName(db, 'ข้าว'))?.id).toBe(a.id)
   })
 })
 

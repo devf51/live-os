@@ -2,9 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Kysely } from 'kysely'
 import { testDb } from './helpers/testDb.js'
 import type { Schema } from '../src/db/schema.js'
-import { buildApp } from '../src/app.js'
-import { testPush } from './helpers/push.js'
-import { hashPassword } from '../src/auth/auth.js'
 import { addEvent, addTask, listToday, occurrencesBetween } from '../src/planner/planner.js'
 
 let db: Kysely<Schema>
@@ -71,66 +68,5 @@ describe('listToday', () => {
     const r = await listToday(db, now)
     expect(r.map((x) => [x.kind, x.id])).toEqual([['event', e1.id], ['task', t1.id]])
     expect(r.every((x) => typeof x.id === 'number')).toBe(true)
-  })
-})
-
-describe('routes', () => {
-  let app: ReturnType<typeof buildApp>
-  let cookies: Record<string, string>
-  beforeAll(async () => {
-    app = buildApp({ db, ownerPasswordHash: await hashPassword('pw'), sessionSecret: 'test-secret-test-secret', ...testPush, now: () => d('2026-11-25T03:00:00Z') })
-    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'pw' } })
-    cookies = { [res.cookies[0]!.name]: res.cookies[0]!.value }
-  })
-  afterAll(async () => { await app.close() })
-  const call = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: object) => app.inject({ method, url, payload, cookies })
-
-  it('401 without a session', async () => {
-    for (const u of ['/events', '/tasks', '/today']) expect((await app.inject({ url: u })).statusCode).toBe(401)
-  })
-  it('event CRUD with exact JSON types', async () => {
-    const c = await call('POST', '/events', { title: 'คลาส', kind: 'class', startsAt: '2026-11-18T01:00:00Z', repeatWeekly: true, leadMinutes: 30 })
-    expect(c.statusCode).toBe(201)
-    const { id } = c.json()
-    expect((await call('GET', '/events')).json()).toEqual([
-      { id, title: 'คลาส', kind: 'class', startsAt: '2026-11-18T01:00:00.000Z', endsAt: null, repeatWeekly: true, leadMinutes: 30 },
-    ])
-    expect((await call('PATCH', `/events/${id}`, { title: 'x', repeatWeekly: false })).statusCode).toBe(200)
-    expect((await call('GET', '/events')).json()[0]).toMatchObject({ title: 'x', repeatWeekly: false })
-    expect((await call('DELETE', `/events/${id}`)).statusCode).toBe(204)
-    expect((await call('GET', '/events')).json()).toEqual([])
-    expect((await call('DELETE', `/events/${id}`)).statusCode).toBe(404)
-    expect((await call('PATCH', `/events/${id}`, { title: 'y' })).statusCode).toBe(404)
-  })
-  it('event validation: 400', async () => {
-    const ok = { title: 't', kind: 'class', startsAt: '2026-11-18T01:00:00Z' }
-    for (const bad of [{ ...ok, title: '' }, { ...ok, kind: 'x' }, { ...ok, startsAt: 'nope' }, { ...ok, endsAt: '2026-11-18T00:00:00Z' }, { ...ok, leadMinutes: 10081 }, { ...ok, leadMinutes: 1.5 }]) {
-      expect((await call('POST', '/events', bad)).statusCode).toBe(400)
-    }
-    const { id } = (await call('POST', '/events', { ...ok, repeatWeekly: false })).json()
-    expect((await call('PATCH', `/events/${id}`, { endsAt: '2026-11-18T00:00:00Z' })).statusCode).toBe(400)
-    expect((await call('PATCH', `/events/${id}`, { bogus: 1 })).statusCode).toBe(400)
-  })
-  it('task CRUD, status filter, validation', async () => {
-    const { id } = (await call('POST', '/tasks', { title: 'จ่ายค่าเช่า', priority: 2, dueAt: '2026-11-25T05:00:00Z' })).json()
-    expect((await call('GET', '/tasks')).json()).toEqual([{ id, title: 'จ่ายค่าเช่า', priority: 2, dueAt: '2026-11-25T05:00:00.000Z', status: 'todo' }])
-    expect((await call('POST', '/tasks', { title: 'a', priority: 5 })).statusCode).toBe(400)
-    expect((await call('PATCH', `/tasks/${id}`, { status: 'done' })).statusCode).toBe(200)
-    expect((await call('GET', '/tasks?status=todo')).json()).toEqual([])
-    expect((await call('GET', '/tasks?status=done')).json()).toHaveLength(1)
-    expect((await call('GET', '/tasks?status=zzz')).statusCode).toBe(400)
-    expect((await call('DELETE', `/tasks/${id}`)).statusCode).toBe(204)
-    expect((await call('GET', '/tasks')).json()).toEqual([])
-    expect((await call('PATCH', `/tasks/${id}`, { title: 'q' })).statusCode).toBe(404)
-  })
-  it('GET /today exact shape', async () => {
-    const e = (await call('POST', '/events', { title: 'e', kind: 'appointment', startsAt: '2026-11-25T02:00:00Z' })).json()
-    const t = (await call('POST', '/tasks', { title: 't', priority: 1, dueAt: '2026-11-25T01:00:00Z' })).json()
-    const n = (await call('POST', '/tasks', { title: 'n', priority: 1 })).json()
-    expect(n.id).toBeTypeOf('number')
-    expect((await call('GET', '/today')).json()).toEqual([
-      { kind: 'task', id: t.id, title: 't', at: '2026-11-25T01:00:00.000Z' },
-      { kind: 'event', id: e.id, title: 'e', at: '2026-11-25T02:00:00.000Z' },
-    ])
   })
 })

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import { enablePush, needsIosInstall } from '../push'
 import { InstallGuide } from './InstallGuide'
+import { Button } from '@/components/ui/button'
 
 const MSG = {
   ok: 'เปิดการแจ้งเตือนแล้ว',
@@ -22,12 +23,11 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <main className="page">
-      <h1>ตั้งค่า</h1>
+    <div className="grid gap-3">
       {ios && <InstallGuide />}
-      <button onClick={enable}>เปิดการแจ้งเตือน</button>
-      <p role="status">{msg}</p>
-      <button className="quiet" onClick={() => api('/auth/logout', { method: 'POST' }).finally(onLogout)}>ออกจากระบบ</button>
-    </main>
+      <Button onClick={enable}>เปิดการแจ้งเตือน</Button>
+      <p role="status" className="text-sm text-muted-foreground">{msg}</p>
+      <Button variant="link" onClick={() => api('/auth/logout', { method: 'POST' }).finally(onLogout)}>ออกจากระบบ</Button>
+    </div>
   )
 }

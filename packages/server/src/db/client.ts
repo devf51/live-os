@@ -3,10 +3,12 @@ import { createPool } from 'mysql2'
 import type { Schema } from './schema.js'
 import * as m001 from './migrations/001_init.js'
 import * as m002 from './migrations/002_reminder_fields.js'
+import * as m003 from './migrations/003_thai_collation.js'
 
 const migrations = [
   { version: '001_init', up: m001.up },
   { version: '002_reminder_fields', up: m002.up },
+  { version: '003_thai_collation', up: m003.up },
 ]
 
 export function createDb(url: string): Kysely<Schema> {

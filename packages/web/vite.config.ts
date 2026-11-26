@@ -1,12 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath } from 'node:url'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const API = 'http://127.0.0.1:3000'
 
 export default defineConfig({
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
